@@ -33,7 +33,15 @@ with st.sidebar:
     except:
         st.info("Logo UDL-SBA")
     
-    st.header("🎮 Paramètres du Réacteur")
+    st.header("🎮 Configuration du Système")
+    
+    # --- AJOUT DU SÉLECTEUR DE RÉACTEURS ---
+    nb_reacteurs = st.number_input("Nombre de réacteurs (en parallèle)", min_value=1, max_value=10, value=2)
+    st.caption(f"Configuration actuelle : {nb_reacteurs} réacteurs DBD coaxiaux")
+    
+    st.divider()
+    
+    st.header("⚙️ Paramètres Opérationnels")
     v_peak = st.slider("Tension Crête (kV)", 10.0, 35.0, 25.0)
     freq = st.slider("Fréquence (Hz)", 1000, 25000, 15000)
     hum = st.slider("Humidité H2O (%)", 10, 95, 70)
@@ -48,7 +56,7 @@ with st.sidebar:
     st.image(qr_buf.getvalue(), caption="Accès distant")
     
     if st.button("🛑 ARRÊT D'URGENCE", type="primary", use_container_width=True):
-        st.error("HAUTE TENSION COUPÉE")
+        st.error("HAUTE TENSION COUPÉE - SYSTÈME SÉCURISÉ")
 
 # =================================================================
 # 3. FONDEMENTS THÉORIQUES (LES ÉQUATIONS)
@@ -166,5 +174,6 @@ st.download_button("💾 Exporter les mesures (Excel)", df_exp.to_csv(), "donnee
 
 st.markdown("---")
 st.center = st.write("© 2026 OH-generator Plasma - Électrotechnique UDL-SBA")
+
 
 
