@@ -18,7 +18,7 @@ st.set_page_config(
 # --- TITRE OFFICIEL ET RAPPEL ---
 # Plateforme de commande de génération d'hydroxcile par plasma froid-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA
 st.title("⚡ Start-up-OH Generator Plasma")
-st.subheader("Module : OH-generator Plasma - Système Intelligent de Traitement des Fumées")
+st.subheader("OH-generator Plasma - Système Intelligent de Traitement des Fumées")
 st.markdown("#### Optimisation de la Production de Radicaux (·OH) par Commande Adaptive IA")
 st.caption(f"Département d'Électrotechnique - Faculté de Génie Électrique - UDL-SBA | Date : {datetime.now().strftime('%d/%m/%Y')}")
 
@@ -166,4 +166,5 @@ st.download_button("💾 Exporter les mesures (Excel)", df_exp.to_csv(), "donnee
 
 st.markdown("---")
 st.center = st.write("© 2026 OH-generator Plasma - Électrotechnique UDL-SBA")
+
 
