@@ -5,6 +5,8 @@ import plotly.graph_objects as go
 import segno
 from io import BytesIO
 from datetime import datetime
+import firebase_admin
+from firebase_admin import credentials, db
 
 # =================================================================
 # 1. CONFIGURATION DE LA PAGE
@@ -15,7 +17,33 @@ st.set_page_config(
     page_icon="⚡"
 )
 
-# --- TITRE OFFICIEL ---
+# --- CONNEXION FIREBASE ---
+if not firebase_admin._apps:
+    try:
+        # Assurez-vous que le nom du fichier correspond exactement à votre fichier téléchargé
+        cred = credentials.Certificate('cle_firebase.json') 
+        firebase_admin.initialize_app(cred, {
+            'databaseURL': 'VOTRE_URL_FIREBASE_ICI' # <--- REMPLACEZ PAR VOTRE URL RÉELLE
+        })
+        st.sidebar.success("✅ Connecté au Cloud Firebase")
+    except Exception as e:
+        st.sidebar.error(f"❌ Erreur de connexion Cloud : {e}")
+
+# =================================================================
+# 2. RÉCUPÉRATION DES DONNÉES TEMPS RÉEL
+# =================================================================
+def get_live_metrics():
+    try:
+        ref = db.reference('/mesures')
+        return ref.get()
+    except:
+        return None
+
+live_data = get_live_metrics()
+
+# =================================================================
+# 3. TITRE ET ENTÊTE OFFICIEL
+# =================================================================
 st.title("⚡ Start-up-OH Generator Plasma")
 st.markdown("### OH-generator Plasma - Système Intelligent de Traitement des Fumées")
 st.markdown("#### Optimisation de la Production de Radicaux (·OH) par Commande Adaptive IA")
@@ -24,12 +52,11 @@ st.caption(f"Département d'Électrotechnique - Faculté de Génie Électrique -
 st.divider()
 
 # =================================================================
-# 2. BARRE LATÉRALE (SIDEBAR)
+# 4. BARRE LATÉRALE (SIDEBAR) - CONTRÔLE HYBRIDE
 # =================================================================
 with st.sidebar:
     st.header("🎮 Configuration du Système")
     
-    # Sélecteur de nombre de réacteurs
     nb_reacteurs = st.number_input(
         "Nombre de réacteurs (en parallèle)", 
         min_value=1, 
@@ -41,11 +68,24 @@ with st.sidebar:
     st.divider()
     
     st.header("⚙️ Paramètres Opérationnels")
-    # Sliders de commande
-    v_peak = st.slider("Tension Crête (kV)", 10.0, 35.0, 25.0)
-    freq = st.slider("Fréquence (Hz)", 1000, 25000, 15000)
-    hum = st.slider("Humidité H2O (%)", 10, 95, 70)
-    temp = st.slider("Température des Fumées (°C)", 20, 250, 60)
+    
+    # Logique de basculement Auto/Manuel
+    if live_data:
+        st.info("📡 Mode : Temps Réel (Données du Labo)")
+        v_peak = float(live_data.get('tension', 25.0))
+        freq = int(live_data.get('frequence', 15000))
+        hum = int(live_data.get('humidite', 70))
+        temp = int(live_data.get('temperature', 60))
+        
+        # Affichage informatif des valeurs reçues
+        st.write(f"**Tension reçue :** {v_peak} kV")
+        st.write(f"**Fréquence reçue :** {freq} Hz")
+    else:
+        st.warning("🔌 Mode : Simulation (Curseurs actifs)")
+        v_peak = st.slider("Tension Crête (kV)", 10.0, 35.0, 25.0)
+        freq = st.slider("Fréquence (Hz)", 1000, 25000, 15000)
+        hum = st.slider("Humidité H2O (%)", 10, 95, 70)
+        temp = st.slider("Température des Fumées (°C)", 20, 250, 60)
     
     st.divider()
     
@@ -62,7 +102,7 @@ with st.sidebar:
         st.error("HAUTE TENSION COUPÉE - SYSTÈME SÉCURISÉ")
 
 # =================================================================
-# 3. BASES PHYSICO-CHIMIQUES (ÉQUATIONS)
+# 5. BASES PHYSICO-CHIMIQUES ET ÉQUATIONS
 # =================================================================
 with st.expander("📚 Bases Physico-Chimiques et Équations du Modèle"):
     st.markdown("### 1. Modélisation Électrique Multi-Réacteur")
@@ -81,18 +121,18 @@ with st.expander("📚 Bases Physico-Chimiques et Équations du Modèle"):
     st.info("Où β (bêta) est la constante de stabilité thermique (≈ 85°C pour ce réacteur).")
 
 # =================================================================
-# 4. MOTEUR DE CALCUL (LOGIQUE IA)
+# 6. MOTEUR DE CALCUL (LOGIQUE IA)
 # =================================================================
-# Paramètres fixes du design
+# Paramètres fixes du design basés sur vos instructions
 C_UNIT = 150e-12 
 V_TH = 12.0
 ALPHA = 0.09  
 BETA = 85     
 
-# Calcul de la puissance (multipliée par le nombre de réacteurs)
+# Calcul de la puissance
 puissance_active = (0.5 * (C_UNIT * nb_reacteurs) * (v_peak * 1000)**2) * freq
 
-# Calcul de l'intensité (multipliée par le nombre de réacteurs)
+# Calcul de l'intensité
 v_range = np.linspace(0, v_peak, 100)
 i_plasma_unit = np.where(v_range > V_TH, 0.00065 * (v_range - V_TH)**1.55, 1e-7)
 i_peak_ma = (i_plasma_unit[-1] * 1000) * nb_reacteurs
@@ -103,7 +143,7 @@ o3_base = (puissance_active * (1 - hum/100) * 0.045)
 o3_ppm = o3_base * np.exp(-temp / BETA)
 
 # =================================================================
-# 5. AFFICHAGE DES INDICATEURS (METRICS)
+# 7. AFFICHAGE DES INDICATEURS (METRICS)
 # =================================================================
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Production ·OH", f"{oh_ppm:.2f} ppm")
@@ -114,13 +154,12 @@ c4.metric("Courant Crête", f"{i_peak_ma:.2f} mA")
 st.divider()
 
 # =================================================================
-# 6. GRAPHIQUES (VISUALISATION)
+# 8. GRAPHIQUES (VISUALISATION)
 # =================================================================
 g1, g2 = st.columns(2)
 
 with g1:
     st.subheader("⚡ Caractéristique Électrique I(V)")
-    
     fig_iv = go.Figure()
     fig_iv.add_trace(go.Scatter(
         x=v_range, 
@@ -129,24 +168,34 @@ with g1:
         fill='tozeroy', 
         line=dict(color='#FF00FF', width=4)
     ))
-    fig_iv.update_layout(xaxis_title="Tension (kV)", yaxis_title="Intensité Totale (mA)", template="plotly_dark")
+    fig_iv.update_layout(
+        xaxis_title="Tension (kV)", 
+        yaxis_title="Intensité Totale (mA)", 
+        template="plotly_dark",
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
     st.plotly_chart(fig_iv, use_container_width=True)
 
 with g2:
     st.subheader("📈 Concentrations des Espèces")
-    
     t_sim = np.linspace(0, 60, 50)
+    # Ajout d'un petit bruit pour le réalisme visuel
     oh_noise = oh_ppm + np.random.normal(0, oh_ppm*0.02, 50)
     o3_noise = o3_ppm + np.random.normal(0, o3_ppm*0.02, 50)
     
     fig_chem = go.Figure()
     fig_chem.add_trace(go.Scatter(x=t_sim, y=oh_noise, name="·OH", line=dict(color='#00FBFF', width=3)))
     fig_chem.add_trace(go.Scatter(x=t_sim, y=o3_noise, name="O3", line=dict(color='orange', dash='dash')))
-    fig_chem.update_layout(xaxis_title="Temps (s)", yaxis_title="Concentration (ppm)", template="plotly_dark")
+    fig_chem.update_layout(
+        xaxis_title="Temps (s)", 
+        yaxis_title="Concentration (ppm)", 
+        template="plotly_dark",
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
     st.plotly_chart(fig_chem, use_container_width=True)
 
 # =================================================================
-# 7. FICHE TECHNIQUE ET SÉCURITÉ
+# 9. FICHE TECHNIQUE ET SÉCURITÉ
 # =================================================================
 st.divider()
 f1, f2 = st.columns(2)
@@ -174,7 +223,7 @@ with f2:
     st.warning("**TEMPÉRATURE :** Risque de brûlure sur le tube de quartz (P > 200W).")
 
 # =================================================================
-# 8. PIED DE PAGE
+# 10. PIED DE PAGE
 # =================================================================
 st.divider()
 st.markdown("<center>© 2026 OH-generator Plasma - Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
