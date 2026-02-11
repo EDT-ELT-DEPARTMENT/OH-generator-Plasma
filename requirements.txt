@@ -1,7 +1,10 @@
 streamlit
 pandas
+numpy
+plotly
+segno
+supabase
 openpyxl
 xlsxwriter
-supabase
-segno
-plotly
+firebase-admin
+python-dotenv
