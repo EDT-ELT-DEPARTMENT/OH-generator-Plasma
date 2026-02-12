@@ -112,7 +112,7 @@ with st.expander("📚 Bases Physico-Chimiques et Équations du Modèle", expand
 # =================================================================
 # 5. MOTEUR DE CALCUL PHYSIQUE
 # =================================================================
-EPSILON_R = 3.8  # Quartz
+EPSILON_R = 3.8  
 EPSILON_0 = 8.854e-12
 V_TH = 12.0 
 ALPHA = 0.09 
@@ -126,12 +126,15 @@ C_UNIT = (2 * np.pi * EPSILON_0 * EPSILON_R * L_m) / np.log(r_ext / r_int)
 # --- Simulation des Signaux Temporels pour Lissajous ---
 t_vec = np.linspace(0, 1/freq, 1000)
 V_t = v_peak * np.sin(2 * np.pi * freq * t_vec)
-# Modèle de charge incluant le déphasage et la décharge plasma (non-linéarité)
 Q_t = (C_UNIT * nb_reacteurs * 1e6) * v_peak * (np.sin(2 * np.pi * freq * t_vec + 0.8) + 0.06 * np.sign(V_t))
 
-# --- CALCUL DE LA SURFACE DE LISSAJOUS (Intégrale de cycle) ---
-# Énergie par cycle en mJ (Surface Q-V)
-energie_mJ = np.abs(np.trapz(Q_t, V_t)) 
+# --- CALCUL DE LA SURFACE DE LISSAJOUS (Correction de l'erreur) ---
+# Support pour NumPy 1.x et 2.x
+if hasattr(np, 'trapezoid'):
+    energie_mJ = np.abs(np.trapezoid(Q_t, V_t))
+else:
+    energie_mJ = np.abs(np.trapz(Q_t, V_t))
+
 puissance_lissajous = energie_mJ * (freq / 1000)
 
 # Chimie et Cinétique
@@ -175,17 +178,15 @@ with g2:
     fig_oh.update_layout(xaxis_title="Distance (cm)", yaxis_title="·OH (ppm)", template="plotly_dark", height=300)
     st.plotly_chart(fig_oh, use_container_width=True)
 
-
 st.subheader("🌀 Analyse de Lissajous (Cycle de Charge-Tension Q-V)")
+
 fig_liss = go.Figure()
 fig_liss.add_trace(go.Scatter(x=V_t, y=Q_t, mode='lines', line=dict(color='#ADFF2F', width=4), fill='toself'))
 fig_liss.update_layout(
     xaxis_title="Tension Instantanée v(t) [kV]", 
     yaxis_title="Charge accumulée q(t) [µC]", 
     template="plotly_dark", 
-    height=450,
-    xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-    yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
+    height=450
 )
 st.plotly_chart(fig_liss, use_container_width=True)
 
@@ -226,10 +227,5 @@ if st.session_state.historique:
 # 9. PIED DE PAGE
 # =================================================================
 st.divider()
-f1, f2 = st.columns(2)
-with f1:
-    st.error("⚠️ Sécurité : Haute Tension (35kV). Utilisation de lunettes de protection UV obligatoire.")
-with f2:
-    st.info(f"Paramètres Géométriques : r_int={rayon_interne}mm | Gap={gap_gaz}mm | L={longueur_decharge}mm")
-
+st.error("⚠️ Sécurité : Haute Tension (35kV). Utilisation de lunettes de protection UV obligatoire.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
