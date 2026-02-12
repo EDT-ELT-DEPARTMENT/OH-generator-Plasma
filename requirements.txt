@@ -4,3 +4,4 @@ numpy
 plotly
 segno
 firebase-admin
+pyserial
