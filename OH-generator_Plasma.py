@@ -9,9 +9,9 @@ import time
 # =================================================================
 # 1. CONFIGURATION ET TITRE OFFICIEL
 # =================================================================
-st.set_page_config(page_title="TTGO Plasma System - UDL-SBA", layout="wide")
+st.set_page_config(page_title="Plasma Monitoring - UDL-SBA", layout="wide")
 
-# Rappel du titre mémorisé exigé
+# Titre exact demandé
 st.title("⚡ Plateforme de monitoring à distance de la génération des oxcidants hybrides OH-/O3")
 st.markdown("### Unité de Contrôle Hybride (Simulation & Expérimental)")
 st.caption(f"Département d'Électrotechnique - UDL-SBA | Date : {datetime.now().strftime('%d/%m/%Y')}")
@@ -19,7 +19,7 @@ st.caption(f"Département d'Électrotechnique - UDL-SBA | Date : {datetime.now()
 st.divider()
 
 # =================================================================
-# 2. BARRE LATÉRALE : SÉLECTION DU MODE
+# 2. BARRE LATÉRALE : SÉLECTION DU MODE ET PARAMÈTRES
 # =================================================================
 with st.sidebar:
     st.header("🎮 Mode de Fonctionnement")
@@ -31,11 +31,11 @@ with st.sidebar:
         st.header("🔌 Connexion TTGO")
         port_com = st.text_input("Port COM (ex: COM3)", value="COM3")
         try:
-            # Tentative d'ouverture du port série
+            # Tentative d'ouverture du port série pour la TTGO
             ser = serial.Serial(port_com, 115200, timeout=0.1)
             st.success(f"TTGO connectée sur {port_com}")
             
-            # Lecture d'une ligne de données (Format attendu : Vp,Freq,Temp)
+            # Lecture des données réelles (Format : Vp,Freq,Temp)
             line = ser.readline().decode('utf-8').strip()
             if line:
                 data = line.split(',')
@@ -46,7 +46,7 @@ with st.sidebar:
                 st.warning("Attente de données série...")
                 v_peak, freq, temp = 23.0, 15000, 45.0
         except Exception as e:
-            st.error("Erreur : TTGO non détectée. Vérifiez le branchement.")
+            st.error("Erreur : TTGO non détectée.")
             v_peak, freq, temp = 23.0, 15000, 45.0
     else:
         st.header("💻 Mode Simulation")
@@ -62,7 +62,7 @@ with st.sidebar:
     L_act = st.number_input("Longueur Active (L) [mm]", value=150.0)
 
 # =================================================================
-# 3. MOTEUR DE CALCUL PHYSIQUE (COMMUN AUX DEUX MODES)
+# 3. MOTEUR DE CALCUL PHYSIQUE (MODÈLE HYBRIDE)
 # =================================================================
 
 # Constantes et Paramètres Quartz
@@ -70,54 +70,76 @@ EPS_0 = 8.854e-12
 EPS_R_QUARTZ = 3.8
 R_ext, R_int = 4.0, 2.5 # mm
 
-# 1. Tension de Seuil (Loi de Paschen adaptée)
+# 1. Tension de Seuil (Vth)
 v_th = 13.2 * (1 + 0.05 * np.sqrt(d_gap)) 
 
 # 2. Modélisation Capacitive
 C_die = (2 * np.pi * EPS_0 * EPS_R_QUARTZ * (L_act/1000)) / np.log(R_ext / R_int)
-C_gap = (2 * np.pi * EPS_0 * 1.0 * (L_act/1000)) / np.log((R_int) / (R_int - d_gap/1000))
-C_cell = (C_die * C_gap) / (C_die + C_gap)
 
-# 3. Calcul de la Puissance Réelle
+# 3. Calcul de la Puissance Active (Loi de Manley)
 if v_peak > v_th:
     p_watt = 4 * freq * C_die * (v_th * 1000) * ((v_peak - v_th) * 1000) * 2
 else:
     p_watt = 0.0
 
-# 4. Cinétique OH (Calibration M2RE)
+# 4. Production de Radicaux ·OH
 k_oh = 0.03554
 oh_final = k_oh * p_watt * (hum/75) * np.exp(-(temp - 45) / 200)
+
+# 5. Production d'Ozone O3 (Nouveau)
+k_o3 = 0.00129 # Constante de production O3
+o3_final = k_o3 * p_watt * (1 - hum/100) * np.exp(-(temp - 45) / 45) if v_peak > v_th else 0.0
+
+# 6. Calcul du Mélange Hybride (%)
+total_oxydants = oh_final + o3_final
+if total_oxydants > 0:
+    pct_oh = (oh_final / total_oxydants) * 100
+    pct_o3 = (o3_final / total_oxydants) * 100
+else:
+    pct_oh, pct_o3 = 0.0, 0.0
+
+# 7. G-Value
 g_value = (oh_final * 40.0) / p_watt if p_watt > 0 else 0.0
 
 # =================================================================
-# 4. AFFICHAGE DES RÉSULTATS (DYNAMIQUE)
+# 4. AFFICHAGE DES RÉSULTATS (METRICS)
 # =================================================================
 label_mode = "🔴 EXPÉRIMENTAL (TTGO)" if mode_experimental else "🔵 SIMULATION"
 st.subheader(f"État du Système : {label_mode}")
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Production ·OH", f"{oh_final:.2f} ppm")
-c2.metric("Puissance Active", f"{p_watt:.1f} W")
-c3.metric("Fréquence", f"{freq} Hz")
-c4.metric("G-Value (OH)", f"{g_value:.3f} g/kWh")
+# Première ligne : OH et O3
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Production ·OH", f"{oh_final:.2f} ppm", f"{pct_oh:.1f} %")
+m2.metric("Production O3", f"{o3_final:.2f} ppm", f"{pct_o3:.1f} %")
+m3.metric("Puissance Active", f"{p_watt:.1f} W")
+m4.metric("G-Value (OH)", f"{g_value:.3f} g/kWh")
+
+# Deuxième ligne : Paramètres de contrôle
+m5, m6, m7, m8 = st.columns(4)
+m5.metric("Fréquence", f"{freq} Hz")
+m6.metric("Température", f"{temp:.1f} °C")
+m7.metric("Humidité", f"{hum} %")
+m8.metric("V-Seuil (Vth)", f"{v_th:.2f} kV")
 
 st.divider()
 
 # =================================================================
-# 5. ANALYSE GRAPHIQUE (LISSAJOUS ET TENSION)
+# 5. VISUALISATION GRAPHIQUE
 # =================================================================
 g1, g2 = st.columns(2)
 
 with g1:
-    st.subheader("🌀 Figure de Lissajous (Q-V)")
-    
-    t = np.linspace(0, 2*np.pi, 1000)
-    v_t = v_peak * np.sin(t)
-    q_t = [ (C_die * 1e6 * (v - np.sign(v)*v_th) + np.sign(v)*(C_cell*1e6*v_th)) if abs(v) > v_th else (C_cell*1e6*v) for v in v_t]
+    st.subheader("🌀 Figure de Lissajous (Loi Tension-Charge)")
+    # Courbe de Lissajous en forme de cercle/ellipse (Loi Tension-Charge)
+    t = np.linspace(0, 2*np.pi, 500)
+    # Tension sinusoïdale
+    v_sin = v_peak * np.sin(t)
+    # Charge déphasée pour créer le cercle/ellipse
+    q_sin = (C_die * 1e6 * v_peak) * np.cos(t) 
     
     fig_q = go.Figure()
-    fig_q.add_trace(go.Scatter(x=v_t, y=q_t, fill="toself", line=dict(color='#ADFF2F', width=2)))
-    fig_q.update_layout(template="plotly_dark", xaxis_title="V (kV)", yaxis_title="Charge (µC)")
+    fig_q.add_trace(go.Scatter(x=v_sin, y=q_sin, fill="toself", line=dict(color='#ADFF2F', width=2)))
+    fig_q.update_layout(template="plotly_dark", xaxis_title="Tension v(t) [kV]", yaxis_title="Charge q(t) [µC]")
     st.plotly_chart(fig_q, use_container_width=True)
 
 with g2:
@@ -125,18 +147,21 @@ with g2:
     
     v_range = np.linspace(10, 35, 100)
     oh_curve = [k_oh * (4 * freq * C_die * (v_th * 1000) * ((v - v_th) * 1000) * 2) if v > v_th else 0 for v in v_range]
+    o3_curve = [k_o3 * (4 * freq * C_die * (v_th * 1000) * ((v - v_th) * 1000) * 2) * (1 - hum/100) * np.exp(-(temp - 45) / 45) if v > v_th else 0 for v in v_range]
+    
     fig_v = go.Figure()
-    fig_v.add_trace(go.Scatter(x=v_range, y=oh_curve, name="·OH", line=dict(color='#00FBFF', width=3)))
-    fig_v.add_vline(x=v_peak, line_dash="dash", line_color="yellow", annotation_text="Point de fonctionnement")
-    fig_v.update_layout(template="plotly_dark", xaxis_title="Tension (kV)", yaxis_title="OH (ppm)")
+    fig_v.add_trace(go.Scatter(x=v_range, y=oh_curve, name="·OH (ppm)", line=dict(color='#00FBFF')))
+    fig_v.add_trace(go.Scatter(x=v_range, y=o3_curve, name="O3 (ppm)", line=dict(color='orange')))
+    fig_v.update_layout(template="plotly_dark", xaxis_title="Tension (kV)", yaxis_title="Concentration (ppm)")
     st.plotly_chart(fig_v, use_container_width=True)
 
 # =================================================================
-# 6. ÉQUATIONS UTILISÉES
+# 6. BASES PHYSIQUES ET SÉCURITÉ
 # =================================================================
 with st.expander("📚 Physique du modèle"):
     st.latex(r"P_{active} = 4 \cdot f \cdot C_{die} \cdot V_{th} \cdot (V_p - V_{th})")
     st.write(f"Vitesse d'acquisition TTGO : 115200 bauds")
+    st.info("Le pourcentage (%) sous les métriques OH et O3 représente la part de chaque espèce dans le mélange hybride total.")
 
+st.error("⚠️ Sécurité : Haute Tension. Production d'ozone. Utiliser sous hotte aspirante.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
-
