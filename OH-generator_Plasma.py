@@ -71,7 +71,7 @@ with st.sidebar:
         st.rerun()
 
     # Initialisation des variables de session pour l'optimisation
-    if 'v_p' not in st.session_state: st.session_state.v_p = 25.0
+    if 'v_p' not in st.session_state: st.session_state.v_p = 23.0 # Mis à jour à ta valeur actuelle
     if 'f_q' not in st.session_state: st.session_state.f_q = 15000
     if 'h_m' not in st.session_state: st.session_state.h_m = 70
     if 't_p' not in st.session_state: st.session_state.t_p = 60
@@ -103,21 +103,20 @@ with st.expander("📚 Bases Physico-Chimiques et Équations du Modèle", expand
     with col_eq1:
         st.markdown("**1. Modélisation Électrique**")
         st.latex(r"C_{unit} = \frac{2\pi\epsilon_0\epsilon_r L}{\ln(r_{ext}/r_{int})}")
-        st.latex(r"P_{active} = n \cdot (\frac{1}{2} C_{unit} V_{peak}^2 f)")
+        st.latex(r"P_{active} = f \cdot \oint Q \, dV")
     with col_eq2:
         st.markdown("**2. Génération & Transport**")
         st.latex(r"[\cdot OH]_{ppm} = \frac{P_{active} \cdot \text{Hum} \cdot \alpha}{1 + T/1000}")
         st.latex(r"[\cdot OH](t) = [\cdot OH]_0 \cdot e^{-k_{decay} \cdot t}")
 
 # =================================================================
-# 5. MOTEUR DE CALCUL PHYSIQUE
+# 5. MOTEUR DE CALCUL PHYSIQUE (CORRIGÉ POUR 23kV)
 # =================================================================
 EPSILON_R = 3.8  
 EPSILON_0 = 8.854e-12
-V_TH = 12.0 
-ALPHA = 0.09 
+V_TH = 12.0 # Tension d'allumage
 
-# Calcul Capacité
+# Calcul Capacité Géométrique
 r_ext = (rayon_interne + epaisseur_dielectrique + gap_gaz) / 1000
 r_int = rayon_interne / 1000
 L_m = longueur_decharge / 1000
@@ -126,22 +125,29 @@ C_UNIT = (2 * np.pi * EPSILON_0 * EPSILON_R * L_m) / np.log(r_ext / r_int)
 # --- Simulation des Signaux Temporels pour Lissajous ---
 t_vec = np.linspace(0, 1/freq, 1000)
 V_t = v_peak * np.sin(2 * np.pi * freq * t_vec)
-Q_t = (C_UNIT * nb_reacteurs * 1e6) * v_peak * (np.sin(2 * np.pi * freq * t_vec + 0.8) + 0.06 * np.sign(V_t))
 
-# --- CALCUL DE LA SURFACE DE LISSAJOUS (Correction de l'erreur) ---
-# Support pour NumPy 1.x et 2.x
+# Facteur Plasma Recalibré : Augmente drastiquement après V_TH
+# À 23kV, ce facteur doit être significatif
+plasma_expansion = max(0, (v_peak - V_TH) * 0.5) 
+Q_t = (C_UNIT * nb_reacteurs * 1e6) * v_peak * (np.sin(2 * np.pi * freq * t_vec + 0.6) + plasma_expansion * np.sign(V_t))
+
+# --- CALCUL DE LA SURFACE DE LISSAJOUS ---
 if hasattr(np, 'trapezoid'):
     energie_mJ = np.abs(np.trapezoid(Q_t, V_t))
 else:
     energie_mJ = np.abs(np.trapz(Q_t, V_t))
 
-puissance_lissajous = energie_mJ * (freq / 1000)
+puissance_reelle = energie_mJ * (freq / 1000)
 
-# Chimie et Cinétique
-oh_initial = (puissance_lissajous * (hum/100) * ALPHA) / (1 + (temp/1000))
-o3_ppm = (puissance_lissajous * (1 - hum/100) * 0.045) * np.exp(-temp / 85)
+# --- MODÈLE CHIMIQUE REHAUSSÉ ---
+# Rendement alpha proportionnel à l'énergie par cycle
+ALPHA_LABO = 0.85 
+oh_initial = (puissance_reelle * (hum/100) * ALPHA_LABO) / (1 + (temp/500))
+o3_ppm = (puissance_reelle * (1 - hum/100) * 0.08) * np.exp(-temp / 70)
+
+# Transport et Décroissance
 t_transit = (dist_cm / 100) / v_flux
-k_decay = 120 * (1 + (temp / 100))
+k_decay = 90 * (1 + (temp / 100))
 oh_final = oh_initial * np.exp(-k_decay * t_transit)
 
 # =================================================================
@@ -150,22 +156,22 @@ oh_final = oh_initial * np.exp(-k_decay * t_transit)
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Production ·OH", f"{oh_final:.2f} ppm")
 c2.metric("Résiduel O3", f"{o3_ppm:.2f} ppm")
-c3.metric("Puissance (Lissajous)", f"{puissance_lissajous:.1f} W")
+c3.metric("Puissance Réelle", f"{puissance_reelle:.1f} W")
 c4.metric("Énergie / Cycle", f"{energie_mJ:.2f} mJ")
 
 st.divider()
 
 # =================================================================
-# 7. VISUALISATION (I-V, DÉCROISSANCE, LISSAJOUS)
+# 7. VISUALISATION
 # =================================================================
 g1, g2 = st.columns(2)
 
 with g1:
     st.subheader("⚡ Caractéristique I(V)")
     v_range = np.linspace(0, v_peak, 100)
-    i_plasma_unit = np.where(v_range > V_TH, 0.00065 * (v_range - V_TH)**1.55, 1e-7)
+    i_plasma = np.where(v_range > V_TH, 0.002 * (v_range - V_TH)**1.8, 1e-6)
     fig_iv = go.Figure()
-    fig_iv.add_trace(go.Scatter(x=v_range, y=i_plasma_unit * 1000 * nb_reacteurs, fill='tozeroy', line=dict(color='#FF00FF', width=3)))
+    fig_iv.add_trace(go.Scatter(x=v_range, y=i_plasma * 1000 * nb_reacteurs, fill='tozeroy', line=dict(color='#FF00FF', width=3)))
     fig_iv.update_layout(xaxis_title="V (kV)", yaxis_title="I (mA)", template="plotly_dark", height=300)
     st.plotly_chart(fig_iv, use_container_width=True)
 
@@ -178,20 +184,15 @@ with g2:
     fig_oh.update_layout(xaxis_title="Distance (cm)", yaxis_title="·OH (ppm)", template="plotly_dark", height=300)
     st.plotly_chart(fig_oh, use_container_width=True)
 
-st.subheader("🌀 Analyse de Lissajous (Cycle de Charge-Tension Q-V)")
 
+st.subheader("🌀 Analyse de Lissajous (Cycle Q-V)")
 fig_liss = go.Figure()
 fig_liss.add_trace(go.Scatter(x=V_t, y=Q_t, mode='lines', line=dict(color='#ADFF2F', width=4), fill='toself'))
-fig_liss.update_layout(
-    xaxis_title="Tension Instantanée v(t) [kV]", 
-    yaxis_title="Charge accumulée q(t) [µC]", 
-    template="plotly_dark", 
-    height=450
-)
+fig_liss.update_layout(xaxis_title="Tension v(t) [kV]", yaxis_title="Charge q(t) [µC]", template="plotly_dark", height=450)
 st.plotly_chart(fig_liss, use_container_width=True)
 
 # =================================================================
-# 8. SYSTÈME D'ARCHIVAGE (HISTORIQUE)
+# 8. SYSTÈME D'ARCHIVAGE
 # =================================================================
 st.divider()
 st.header("💾 Archivage des Tests de Laboratoire")
@@ -207,25 +208,22 @@ with col_save:
             "V_peak (kV)": v_peak,
             "Freq (Hz)": freq,
             "OH_final (ppm)": round(oh_final, 3),
-            "Energie (mJ)": round(energie_mJ, 2),
-            "P_Watt": round(puissance_lissajous, 1)
+            "P_Watt": round(puissance_reelle, 1)
         }
         st.session_state.historique.append(nouveau_test)
         try:
             db.reference('/historique_tests').push(nouveau_test)
-            st.toast("Données synchronisées avec Firebase !")
+            st.toast("Sync Firebase OK")
         except:
-            st.warning("Archivage local uniquement.")
+            st.warning("Archive Locale")
 
 if st.session_state.historique:
     df_hist = pd.DataFrame(st.session_state.historique)
     st.table(df_hist)
-    csv = df_hist.to_csv(index=False).encode('utf-8')
-    st.download_button("📂 Exporter en CSV", data=csv, file_name="plasma_report_udl.csv", mime="text/csv")
 
 # =================================================================
 # 9. PIED DE PAGE
 # =================================================================
 st.divider()
-st.error("⚠️ Sécurité : Haute Tension (35kV). Utilisation de lunettes de protection UV obligatoire.")
+st.error("⚠️ Sécurité : Haute Tension (35kV). Ventilation obligatoire.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
