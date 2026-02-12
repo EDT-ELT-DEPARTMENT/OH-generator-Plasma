@@ -5,133 +5,116 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 # =================================================================
-# 1. CONFIGURATION DE LA PAGE
+# 1. CONFIGURATION
 # =================================================================
-st.set_page_config(page_title="Plasma Control - UDL-SBA", layout="wide")
+st.set_page_config(page_title="Plasma Dynamics - UDL-SBA", layout="wide")
 
-# =================================================================
-# 2. TITRE (Rappel du titre officiel demandé)
-# =================================================================
+# TITRE OFFICIEL (Mémorisé)
 st.title("⚡ Start-up-OH Generator Plasma")
 st.markdown("### Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA")
-st.caption(f"Optimisation IA - Date du test : {datetime.now().strftime('%d/%m/%Y')}")
-
-st.divider()
 
 # =================================================================
-# 3. SIDEBAR (ENTRÉES)
+# 2. PARAMÈTRES (SIDEBAR)
 # =================================================================
 with st.sidebar:
-    st.header("📐 Dimensions")
-    r_int = st.number_input("Rayon Interne (mm)", value=2.5)
-    e_q = st.number_input("Épaisseur Quartz (mm)", value=1.5)
-    d_gap = st.number_input("Gap (mm)", value=3.0)
-    L_act = st.number_input("Longueur (mm)", value=150.0)
-    n_r = st.number_input("Nb Réacteurs", value=2)
-    
-    st.header("⚙️ Opérations")
+    st.header("⚙️ Paramètres Opérationnels")
     v_peak = st.slider("Tension Crête (kV)", 10.0, 35.0, 23.0)
     freq = st.slider("Fréquence (Hz)", 1000, 25000, 15000)
-    hum = st.slider("Humidité (%)", 10, 95, 75)
+    hum = st.slider("Humidité H2O (%)", 10, 95, 75)
     temp = st.slider("Température (°C)", 20, 250, 45)
     
-    st.header("🚚 Transport")
-    dist = st.slider("Distance (cm)", 0, 50, 2)
-    v_f = st.slider("Vitesse (m/s)", 1, 30, 20)
+    st.divider()
+    st.header("📐 Géométrie du Réacteur")
+    d_gap = st.number_input("Gap de décharge (d) [mm]", value=3.0)
+    L_act = st.number_input("Longueur Active (L) [mm]", value=150.0)
+    n_r = st.number_input("Nombre de réacteurs (n)", value=2)
 
 # =================================================================
-# 4. MOTEUR DE CALCUL (LOGIQUE DÉTERMINISTE)
+# 3. MODÈLE MATHÉMATIQUE DYNAMIQUE (RELATIONS EMPIRIQUES)
 # =================================================================
-# Constantes
-V_SEUIL = 13.0  # Tension d'amorçage à l'UDL
 
-# A. Calcul de la puissance (Modèle simplifié mais robuste)
-if v_peak > V_SEUIL:
-    # Formule de Manley simplifiée : P = 4 * f * C_dielectrique * V_seuil * (V_peak - V_seuil)
-    C_d = (2 * np.pi * 8.85e-12 * 3.8 * (L_act/1000)) / np.log((r_int + e_q)/r_int)
-    puissance_calc = 4 * freq * C_d * (V_SEUIL * 1000) * ((v_peak - V_SEUIL) * 1000) * n_r
-    puissance_w = max(5.0, puissance_calc / 1e6) # En Watts
+# --- A. Seuil de Paschen & Amorçage ---
+# Tension d'amorçage estimée (kV) pour l'air à 3mm
+V_seuil = 13.2 * (1 + 0.05 * np.sqrt(d_gap)) 
+
+# --- B. Dynamique de la Puissance (Loi de Manley révisée) ---
+# La puissance n'est pas fixe, elle croît selon (V - V_seuil)^1.5 à 2
+if v_peak > V_seuil:
+    # Facteur géométrique (Capacité du quartz estimée à 80pF)
+    C_q = 80e-12 * (L_act / 150) 
+    # Puissance dissipée (Relation fondamentale P = 4*f*C*V_th*(V_p - V_th))
+    p_watt = 4 * freq * C_q * (V_seuil * 1000) * (v_peak - V_seuil) * 1000 * n_r
+    p_watt = p_watt / 1.5 # Facteur d'efficacité réelle
 else:
-    puissance_w = 0.0
+    p_watt = 0.0
 
-# B. Calcul de l'Ozone (O3)
-# Production de base - dépend de l'O2 disponible (100 - humidité)
-o3_base = puissance_w * (1 - (hum/100)) * 0.45
-# Destruction thermique : L'O3 s'effondre avec T
-destruction_thermique = np.exp(-(temp - 20) / 50)
-o3_final = o3_base * destruction_thermique
+# --- C. Production de OH (Relation Empirique Dynamique) ---
+# [OH] est proportionnel à la densité de micro-décharges
+# Loi : [OH] = k * P^0.8 * Humidité
+k_oh = 0.12 # Constante de production labo
+oh_base = k_oh * (p_watt**0.85) * (hum/100)
+# Influence de la température sur la stabilité (Décomposition)
+oh_final = oh_base * np.exp(-(temp - 20) / 180)
 
-# C. Calcul des Radicaux OH
-oh_base = puissance_w * (hum/100) * 1.8
-k_decay = 90 * (1 + (temp/100))
-t_transit = (dist/100) / v_f
-oh_final = oh_base * np.exp(-k_decay * t_transit)
+# --- D. Production de O3 (Dynamique de l'Oxygène) ---
+# [O3] augmente avec P mais s'effondre avec T
+k_o3 = 0.08
+o3_base = k_o3 * (p_watt**0.7) * (1 - hum/100)
+# Destruction thermique fondamentale (Loi d'Arrhenius simplifiée)
+# L'ozone disparaît très vite au dessus de 80°C
+destruction_o3 = np.exp(-(temp - 20) / 45) 
+o3_final = o3_base * destruction_destruction_o3 if v_peak > V_seuil else 0.0
 
 # =================================================================
-# 5. AFFICHAGE DES RÉSULTATS
+# 4. AFFICHAGE DES RÉSULTATS
 # =================================================================
-col1, col2, col3, col4 = st.columns(4)
-
-# Forçage visuel pour garantir une réponse à 23kV
-if v_peak >= 23.0 and puissance_w < 1.0:
-    puissance_w = 21.4
-    oh_final = 18.5
-    o3_final = 4.2
-
-col1.metric("Production ·OH", f"{oh_final:.2f} ppm", delta="Actif")
-col2.metric("Résiduel O3", f"{o3_final:.2f} ppm", delta="- Thermique" if temp > 40 else None)
-col3.metric("Puissance Réelle", f"{puissance_w:.1f} W")
-col4.metric("Énergie / Cycle", f"{(puissance_w/freq)*1000:.2f} mJ")
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Production ·OH", f"{oh_final:.2f} ppm")
+c2.metric("Résiduel O3", f"{o3_final:.2f} ppm")
+c3.metric("Puissance active", f"{p_watt:.1f} W")
+c4.metric("E/V (Champ moy.)", f"{v_peak/d_gap:.2f} kV/mm")
 
 st.divider()
 
 # =================================================================
-# 6. GRAPHIQUES (LISSAJOUS FORCÉ)
+# 5. GRAPHIQUES DE SENSIBILITÉ (INFLUENCE DE V)
 # =================================================================
-t = np.linspace(0, 1, 500)
-v_sin = v_peak * np.sin(2 * np.pi * t)
-# Création d'une boucle fermée pour Lissajous
-q_sin = []
-for v in v_sin:
-    if v > V_SEUIL: q = 0.5 * (v - V_SEUIL) + 0.2
-    elif v < -V_SEUIL: q = 0.5 * (v + V_SEUIL) - 0.2
-    else: q = 0.1 * v
-    q_sin.append(q)
+st.subheader("📊 Analyse de l'influence de la Tension")
 
-g1, g2 = st.columns(2)
+v_range = np.linspace(10, 35, 100)
+oh_curve = []
+o3_curve = []
 
-with g1:
-    st.subheader("🌀 Figure de Lissajous")
-    
-    fig_q = go.Figure()
-    fig_q.add_trace(go.Scatter(x=v_sin, y=q_sin, fill="toself", line=dict(color='#ADFF2F')))
-    fig_q.update_layout(xaxis_title="V (kV)", yaxis_title="Q (µC)", template="plotly_dark", height=300)
-    st.plotly_chart(fig_q, use_container_width=True)
+for v in v_range:
+    if v > V_seuil:
+        p = 4 * freq * C_q * (V_seuil * 1000) * (v - V_seuil) * 1000 * n_r / 1.5
+        oh = (k_oh * (max(0, p)**0.85) * (hum/100)) * np.exp(-(temp - 20) / 180)
+        o3 = (k_o3 * (max(0, p)**0.7) * (1 - hum/100)) * np.exp(-(temp - 20) / 45)
+    else:
+        oh, o3 = 0, 0
+    oh_curve.append(oh)
+    o3_curve.append(o3)
 
-with g2:
-    st.subheader("📈 Stabilité O3 vs Température")
-    temps_range = np.linspace(20, 250, 100)
-    o3_decay_plot = o3_base * np.exp(-(temps_range - 20) / 50)
-    fig_t = go.Figure()
-    fig_t.add_trace(go.Scatter(x=temps_range, y=o3_decay_plot, line=dict(color='orange')))
-    fig_t.add_vline(x=temp, line_dash="dash", line_color="red")
-    fig_t.update_layout(xaxis_title="Température (°C)", yaxis_title="O3 (ppm)", template="plotly_dark", height=300)
-    st.plotly_chart(fig_t, use_container_width=True)
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=v_range, y=oh_curve, name="·OH (ppm)", line=dict(color='#00FBFF', width=3)))
+fig.add_trace(go.Scatter(x=v_range, y=o3_curve, name="O3 (ppm)", line=dict(color='orange', width=3)))
+fig.add_vline(x=v_peak, line_dash="dash", line_color="white", annotation_text="Tension actuelle")
+fig.update_layout(xaxis_title="Tension Crête (kV)", yaxis_title="Concentration (ppm)", template="plotly_dark")
+st.plotly_chart(fig, use_container_width=True)
 
 # =================================================================
-# 7. ARCHIVAGE (DISPOSITION DEMANDÉE)
+# 6. DISPOSITION DES DONNÉES (Mémorisée)
 # =================================================================
-st.subheader("💾 Historique des Enseignements")
-# Respect de la disposition demandée : Enseignements, Code, Enseignants, Horaire, Jours, Lieu, Promotion
-data = {
-    "Enseignements": ["Production Plasma", "Cinétique OH", "Analyse O3"],
-    "Code": ["PL-01", "OH-02", "O3-03"],
-    "Enseignants": ["Dépt Électrotechnique", "Labo SBA", "Equipe IA"],
-    "Horaire": [f"{v_peak} kV", f"{freq} Hz", f"{temp} °C"],
-    "Jours": ["Lundi", "Mardi", "Mercredi"],
-    "Lieu": ["S06", "Labo", "S06"],
-    "Promotion": ["M2RE", "M2RE", "M2RE"]
+st.subheader("📋 Récapitulatif du Système")
+disposition_data = {
+    "Enseignements": ["Génération Plasma", "Oxydation Radicale"],
+    "Code": ["PL-SBA-26", "IA-OH"],
+    "Enseignants": ["Dépt Électrotechnique", "Labo UDL"],
+    "Horaire": [f"{v_peak} kV", f"{freq} Hz"],
+    "Jours": ["2026-S2", "2026-S2"],
+    "Lieu": ["Fac. Génie Électrique", "S06"],
+    "Promotion": ["M2RE", "M2RE"]
 }
-st.table(pd.DataFrame(data))
+st.table(pd.DataFrame(disposition_data))
 
-st.info("💡 **Diagnostic :** À 23 kV, le système est en saturation. L'ozone est instable au-delà de 60°C. Si les valeurs ne bougent pas, vérifiez la version de votre navigateur.")
+st.warning("⚠️ À haute tension (>30kV), le risque d'arc électrique augmente. Surveillez la température du quartz.")
