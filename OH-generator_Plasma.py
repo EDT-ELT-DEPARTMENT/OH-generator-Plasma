@@ -26,7 +26,7 @@ if not firebase_admin._apps:
         # Initialisation avec les secrets chargés en mémoire
         cred = credentials.Certificate(fb_creds)
         firebase_admin.initialize_app(cred, {
-            'databaseURL': 'https://votre-projet-default-rtdb.firebaseio.com/' # <--- VERIFIE BIEN CETTE URL
+            'databaseURL': 'https://oh-generator-plasma-sba-default-rtdb.europe-west1.firebasedatabase.app/' # <--- VERIFIE BIEN CETTE URL
         })
         st.sidebar.success("✅ Connecté au Cloud Firebase via Secrets")
     except Exception as e:
@@ -180,4 +180,5 @@ with s2:
     st.info(f"Temps de transit : {t_transit*1000:.2f} ms")
 
 st.markdown("<center>© 2026 OH-generator Plasma - Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
 
