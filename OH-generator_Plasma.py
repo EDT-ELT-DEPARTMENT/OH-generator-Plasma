@@ -20,10 +20,22 @@ st.set_page_config(
 # --- CONNEXION FIREBASE ---
 if not firebase_admin._apps:
     try:
-        # Assurez-vous que le nom du fichier correspond exactement à votre fichier téléchargé
-        cred = credentials.Certificate('cle_firebase.json') 
+        import os  # Assurez-vous que cette ligne est bien présente tout en haut du fichier avec les autres imports
+
+# --- CONNEXION FIREBASE (VERSION CORRIGÉE) ---
+if not firebase_admin._apps:
+    try:
+        # Cette partie permet à Python de trouver le fichier peu importe comment vous lancez le script
+        chemin_actuel = os.path.dirname(os.path.abspath(__file__))
+        chemin_cle = os.path.join(chemin_actuel, 'cle_firebase.json')
+        
+        cred = credentials.Certificate(chemin_cle)
         firebase_admin.initialize_app(cred, {
-            'databaseURL': 'VOTRE_URL_FIREBASE_ICI' # <--- REMPLACEZ PAR VOTRE URL RÉELLE
+            'databaseURL': 'https://oh-generator-plasma-default-rtdb.europe-west1.firebasedatabase.app/' 
+        })
+        st.sidebar.success("✅ Connecté au Cloud Firebase")
+    except Exception as e:
+        st.sidebar.error(f"❌ Erreur de connexion Cloud : {e}")
         })
         st.sidebar.success("✅ Connecté au Cloud Firebase")
     except Exception as e:
@@ -227,3 +239,4 @@ with f2:
 # =================================================================
 st.divider()
 st.markdown("<center>© 2026 OH-generator Plasma - Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
