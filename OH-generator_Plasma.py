@@ -20,173 +20,158 @@ st.set_page_config(
 # --- CONNEXION FIREBASE ---
 if not firebase_admin._apps:
     try:
-        # Utilisez les secrets Streamlit pour la sécurité en production
         cred = credentials.Certificate('cle_firebase.json') 
         firebase_admin.initialize_app(cred, {
-            'databaseURL': 'VOTRE_URL_FIREBASE_ICI' 
+            'databaseURL': 'https://votre-projet-default-rtdb.firebaseio.com/' 
         })
         st.sidebar.success("✅ Connecté au Cloud Firebase")
     except Exception as e:
-        st.sidebar.error(f"❌ Erreur de connexion Cloud : {e}")
+        st.sidebar.warning("🔌 Mode local : cle_firebase.json non détectée")
 
 # =================================================================
-# 2. RÉCUPÉRATION DES DONNÉES TEMPS RÉEL
-# =================================================================
-def get_live_metrics():
-    try:
-        ref = db.reference('/mesures')
-        return ref.get()
-    except:
-        return None
-
-live_data = get_live_metrics()
-
-# =================================================================
-# 3. TITRE ET ENTÊTE OFFICIEL
+# 2. TITRE ET ENTÊTE
 # =================================================================
 st.title("⚡ Start-up-OH Generator Plasma")
-st.markdown("### OH-generator Plasma - Système Intelligent de Traitement des Fumées")
+st.markdown("### Système Intelligent de Traitement des Fumées")
 st.markdown("#### Optimisation de la Production de Radicaux (·OH) par Commande Adaptive IA")
 st.caption(f"Département d'Électrotechnique - Faculté de Génie Électrique - UDL-SBA | Date : {datetime.now().strftime('%d/%m/%Y')}")
 
 st.divider()
 
 # =================================================================
-# 4. BARRE LATÉRALE (SIDEBAR) - CONTRÔLE HYBRIDE
+# 3. BARRE LATÉRALE (SIDEBAR)
 # =================================================================
 with st.sidebar:
     st.header("🎮 Configuration du Système")
-    
-    nb_reacteurs = st.number_input(
-        "Nombre de réacteurs (en parallèle)", 
-        min_value=1, 
-        max_value=20, 
-        value=2
-    )
+    nb_reacteurs = st.number_input("Nombre de réacteurs", min_value=1, max_value=20, value=2)
     
     st.divider()
-    
     st.header("⚙️ Paramètres Opérationnels")
-    
-    if live_data:
-        st.info("📡 Mode : Temps Réel (Labo)")
-        v_peak = float(live_data.get('tension', 25.0))
-        freq = int(live_data.get('frequence', 15000))
-        hum = int(live_data.get('humidite', 70))
-        temp = int(live_data.get('temperature', 60))
-    else:
-        st.warning("🔌 Mode : Simulation")
-        v_peak = st.slider("Tension Crête (kV)", 10.0, 35.0, 25.0)
-        freq = st.slider("Fréquence (Hz)", 1000, 25000, 15000)
-        hum = st.slider("Humidité H2O (%)", 10, 95, 70)
-        temp = st.slider("Température de l'Air Porteur (°C)", 20, 250, 60)
+    v_peak = st.slider("Tension Crête (kV)", 10.0, 35.0, 25.0)
+    freq = st.slider("Fréquence (Hz)", 1000, 25000, 15000)
+    hum = st.slider("Humidité H2O (%)", 10, 95, 70)
+    temp = st.slider("Température (°C)", 20, 250, 60)
     
     st.divider()
-    
-    # Paramètres de transport
-    st.header("🚚 Transport des Radicaux")
-    dist_cm = st.slider("Distance au polluant (cm)", 0, 50, 5)
-    v_flux = st.slider("Vitesse du flux (m/s)", 1, 30, 15)
+    st.header("🚚 Transport")
+    dist_cm = st.slider("Distance d'injection (cm)", 0, 50, 10)
+    v_flux = st.slider("Vitesse du flux (m/s)", 1, 30, 10)
 
-    st.divider()
-    st.subheader("📱 Monitoring Mobile")
+    # QR Code
     url_app = "https://oh-generator-plasma.streamlit.app"
     qr = segno.make(url_app)
     qr_buf = BytesIO()
     qr.save(qr_buf, kind='png', scale=4)
-    st.image(qr_buf.getvalue(), caption="Accès distant")
-    
-    if st.button("🛑 ARRÊT D'URGENCE", type="primary", use_container_width=True):
-        st.error("HAUTE TENSION COUPÉE")
+    st.image(qr_buf.getvalue(), caption="Monitoring Mobile")
 
 # =================================================================
-# 5. MOTEUR DE CALCUL PHYSIQUE (PLASMA & CHIMIE)
+# 4. AFFICHAGE DES ÉQUATIONS PHYSIQUES (IMPORTANT)
 # =================================================================
-# Constantes fixes
+with st.expander("📚 Bases Physico-Chimiques et Équations du Modèle", expanded=True):
+    st.markdown("#### 1. Modélisation Électrique")
+    st.latex(r"P_{active} = n \times \left( \frac{1}{2} C_{unit} V_{peak}^2 f \right)")
+    st.latex(r"I_{total} = n \times k \times (V - V_{th})^{1.55}")
+    
+    st.markdown("#### 2. Génération de Radicaux (·OH)")
+    st.latex(r"[\cdot OH]_{ppm} = \frac{P_{active} \times \text{Humidité} \times \alpha}{1 + \frac{T}{1000}}")
+    
+    st.markdown("#### 3. Survie et Transport (Cinétique)")
+    st.latex(r"[\cdot OH](t) = [\cdot OH]_0 \times e^{-k_{decay} \times t}")
+    st.write("Où $t$ est le temps de transit : $t = \text{distance} / \text{vitesse}$")
+
+# =================================================================
+# 5. MOTEUR DE CALCUL
+# =================================================================
 C_UNIT = 150e-12 
 V_TH = 12.0
 ALPHA = 0.09  
 BETA = 85     
-D_GAP = 0.005 # 5mm
-E_QUARTZ = 0.002
-EPS_QUARTZ = 3.8
 
-# A. Calculs Électriques
+# Puissance et Courant
 puissance_active = (0.5 * (C_UNIT * nb_reacteurs) * (v_peak * 1000)**2) * freq
 v_range = np.linspace(0, v_peak, 100)
 i_plasma_unit = np.where(v_range > V_TH, 0.00065 * (v_range - V_TH)**1.55, 1e-7)
 i_peak_ma = (i_plasma_unit[-1] * 1000) * nb_reacteurs
 
-# B. Champ Électrique (Air Porteur)
-delta = (293 / (273 + temp)) 
-E_paschen = 30 * delta * (1 + 0.3 / (np.sqrt(delta * 0.5)))
-V_plasma_eff = v_peak * (1 - (E_QUARTZ / (E_QUARTZ + D_GAP * EPS_QUARTZ)))
-E_applied = V_plasma_eff / (D_GAP * 100) # kV/cm
-
-# C. Production et Survie des Radicaux
+# Chimie
 oh_initial = (puissance_active * (hum/100) * ALPHA) / (1 + (temp/1000))
 o3_ppm = (puissance_active * (1 - hum/100) * 0.045) * np.exp(-temp / BETA)
 
-# Temps de vol et Recombinaison
+# Décroissance
 t_transit = (dist_cm / 100) / v_flux
-k_decay = 120 * (1 + (temp / 100)) # Coeff de disparition
+k_decay = 120 * (1 + (temp / 100))
 oh_final = oh_initial * np.exp(-k_decay * t_transit)
 
 # =================================================================
-# 6. AFFICHAGE DES INDICATEURS
+# 6. INDICATEURS (METRICS)
 # =================================================================
-
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Production ·OH (Impact)", f"{oh_final:.2f} ppm", f"{oh_final-oh_initial:.1f} perte")
+c1.metric("Production ·OH", f"{oh_final:.2f} ppm")
 c2.metric("Résiduel O3", f"{o3_ppm:.2f} ppm")
-c3.metric("Puissance Totale", f"{puissance_active:.1f} W")
-c4.metric("Champ Appliqué", f"{E_applied:.2f} kV/cm")
+c3.metric("Puissance Active", f"{puissance_active:.1f} W")
+c4.metric("Courant Crête", f"{i_peak_ma:.2f} mA")
 
 st.divider()
 
 # =================================================================
-# 7. VISUALISATION GRAPHIQUE
+# 7. LES COURBES (GRAPHES)
 # =================================================================
-g1, g2 = st.columns(2)
+col_graph1, col_graph2 = st.columns(2)
 
-with g1:
-    st.subheader("⚡ Caractéristique Électrique")
+with col_graph1:
+    st.subheader("⚡ Caractéristique I(V)")
     fig_iv = go.Figure()
-    fig_iv.add_trace(go.Scatter(x=v_range, y=i_plasma_unit * 1000 * nb_reacteurs, 
-                               fill='tozeroy', line=dict(color='#FF00FF', width=3)))
-    fig_iv.update_layout(xaxis_title="Tension (kV)", yaxis_title="Courant (mA)", template="plotly_dark")
+    fig_iv.add_trace(go.Scatter(
+        x=v_range, 
+        y=i_plasma_unit * 1000 * nb_reacteurs, 
+        name="Courant Total",
+        line=dict(color='#FF00FF', width=4),
+        fill='tozeroy'
+    ))
+    fig_iv.update_layout(
+        xaxis_title="Tension (kV)",
+        yaxis_title="Intensité (mA)",
+        template="plotly_dark",
+        height=400
+    )
     st.plotly_chart(fig_iv, use_container_width=True)
 
-with g2:
-    st.subheader("📉 Décroissance des Radicaux (Survie)")
-    dist_sim = np.linspace(0, 50, 100)
-    survie_sim = oh_initial * np.exp(-k_decay * ((dist_sim/100)/v_flux))
+with col_graph2:
+    st.subheader("📈 Profil de Décroissance ·OH")
+    distances = np.linspace(0, 50, 100)
+    survie_courbe = oh_initial * np.exp(-k_decay * ((distances/100)/v_flux))
+    
     fig_decay = go.Figure()
-    fig_decay.add_trace(go.Scatter(x=dist_sim, y=survie_sim, fill='tozeroy', line=dict(color='#00FBFF')))
-    fig_decay.add_vline(x=dist_cm, line_dash="dash", line_color="red", annotation_text="Point d'injection")
-    fig_decay.update_layout(xaxis_title="Distance (cm)", yaxis_title="·OH (ppm)", template="plotly_dark")
+    fig_decay.add_trace(go.Scatter(
+        x=distances, 
+        y=survie_courbe,
+        name="Survie ·OH",
+        line=dict(color='#00FBFF', width=4),
+        fill='tozeroy'
+    ))
+    # Ligne indiquant la position de l'injection
+    fig_decay.add_vline(x=dist_cm, line_dash="dash", line_color="orange")
+    
+    fig_decay.update_layout(
+        xaxis_title="Distance de transport (cm)",
+        yaxis_title="Concentration (ppm)",
+        template="plotly_dark",
+        height=400
+    )
     st.plotly_chart(fig_decay, use_container_width=True)
 
 # =================================================================
-# 8. MODULE DE DÉPOLLUTION
-# =================================================================
-st.subheader("🍃 Simulation du Traitement des Fumées")
-cp1, cp2 = st.columns(2)
-
-with cp1:
-    polluant = st.selectbox("Polluant à traiter :", ["NOx", "SO2"])
-    conc_in = st.number_input("Concentration initiale (ppm)", value=250)
-
-with cp2:
-    # Efficacité basée sur le ratio OH/Polluant
-    k_eff = 0.9 if polluant == "NOx" else 1.2
-    reduction = (1 - np.exp(-k_eff * (oh_final / 150))) * 100
-    conc_out = conc_in * (1 - reduction/100)
-    st.metric("Réduction estimée", f"{reduction:.1f} %", delta_color="normal")
-    st.write(f"**Concentration de sortie :** {conc_out:.1f} ppm")
-
-# =================================================================
-# 9. PIED DE PAGE
+# 8. SÉCURITÉ ET PIED DE PAGE
 # =================================================================
 st.divider()
+s1, s2 = st.columns(2)
+with s1:
+    st.subheader("⚠️ Sécurité Labo")
+    st.error("Haute Tension : 35kV Max")
+    st.warning("Ozone : Ventilation forcée obligatoire")
+with s2:
+    st.subheader("📝 État du Système")
+    st.success(f"Réacteurs actifs : {nb_reacteurs}")
+    st.info(f"Temps de transit : {t_transit*1000:.2f} ms")
+
 st.markdown("<center>© 2026 OH-generator Plasma - Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
