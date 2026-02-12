@@ -3,8 +3,4 @@ pandas
 numpy
 plotly
 segno
-supabase
-openpyxl
-xlsxwriter
 firebase-admin
-python-dotenv
