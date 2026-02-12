@@ -51,7 +51,6 @@ live_data = get_live_metrics()
 # 3. TITRE OFFICIEL ET ENTÊTE (UDL-SBA)
 # =================================================================
 st.title("⚡ Start-up-OH Generator Plasma")
-st.markdown("### Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA")
 st.markdown("#### Optimisation de la Production de Radicaux (·OH) par Commande Adaptive IA")
 st.caption(f"Système Intelligent de Traitement des Fumées | Date : {datetime.now().strftime('%d/%m/%Y')}")
 
@@ -135,3 +134,4 @@ with col2:
 # =================================================================
 st.divider()
 st.markdown("<center>© 2026 OH-generator Plasma - Électrotechnique UDL-SBA | Laboratoire de Génie Électrique</center>", unsafe_allow_html=True)
+
