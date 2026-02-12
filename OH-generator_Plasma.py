@@ -159,22 +159,6 @@ with g2:
     st.plotly_chart(fig_q, use_container_width=True)
 
 # =================================================================
-# 7. RÉCAPITULATIF (DISPOSITION MÉMORISÉE)
-# =================================================================
-st.subheader("📋 Récapitulatif du Système (Disposition Officielle)")
-# Enseignements, Code, Enseignants, Horaire, Jours, Lieu, Promotion
-recap_data = {
-    "Enseignements": ["Simulation Plasma", "Cinétique Radicale", "Génie Électrique"],
-    "Code": ["DBD-23kV", "OH-SBA", "IA-ADAPT"],
-    "Enseignants": ["Dépt Électrotechnique", "Fac. Génie Élec.", "UDL-SBA"],
-    "Horaire": [f"{v_peak} kV", f"{freq} Hz", f"{temp} °C"],
-    "Jours": ["Dimanche", "Lundi", "Mardi"],
-    "Lieu": ["Labo S06", "Labo S06", "S06"],
-    "Promotion": ["M2RE", "M2RE", "M2RE"]
-}
-st.table(pd.DataFrame(recap_data))
-
-# =================================================================
 # 8. BASES PHYSIQUES (EXPANDER)
 # =================================================================
 with st.expander("📚 Détails des Équations Utilisées"):
@@ -186,3 +170,4 @@ with st.expander("📚 Détails des Équations Utilisées"):
 st.info("💡 **Analyse Technique :** Le rendement énergétique (G-Value) est optimal lorsque la température est maintenue en dessous de 50°C.")
 st.error("⚠️ Sécurité : Haute Tension (35kV). Utilisation de lunettes UV obligatoire.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
