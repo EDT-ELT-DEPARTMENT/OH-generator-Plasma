@@ -36,7 +36,7 @@ if not firebase_admin._apps:
 # =================================================================
 # Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA
 st.title("⚡ Start-up-OH Generator Plasma")
-st.markdown("### Système Intelligent de Tratiement des Fumées")
+st.markdown("### Système Intelligent de Traitement des Fumées")
 st.markdown("#### Optimisation de la Production de Radicaux (·OH) par Commande Adaptive IA")
 st.caption(f"Département d'Électrotechnique - Faculté de Génie Électrique - UDL-SBA | Date : {datetime.now().strftime('%d/%m/%Y')}")
 
@@ -123,15 +123,20 @@ r_int = rayon_interne / 1000
 L_m = longueur_decharge / 1000
 C_UNIT = (2 * np.pi * EPSILON_0 * EPSILON_R * L_m) / np.log(r_ext / r_int)
 
-# Électricité
-puissance_active = (0.5 * (C_UNIT * nb_reacteurs) * (v_peak * 1000)**2) * freq
-v_range = np.linspace(0, v_peak, 100)
-i_plasma_unit = np.where(v_range > V_TH, 0.00065 * (v_range - V_TH)**1.55, 1e-7)
-i_peak_ma = (i_plasma_unit[-1] * 1000) * nb_reacteurs
+# --- Simulation des Signaux Temporels pour Lissajous ---
+t_vec = np.linspace(0, 1/freq, 1000)
+V_t = v_peak * np.sin(2 * np.pi * freq * t_vec)
+# Modèle de charge incluant le déphasage et la décharge plasma (non-linéarité)
+Q_t = (C_UNIT * nb_reacteurs * 1e6) * v_peak * (np.sin(2 * np.pi * freq * t_vec + 0.8) + 0.06 * np.sign(V_t))
+
+# --- CALCUL DE LA SURFACE DE LISSAJOUS (Intégrale de cycle) ---
+# Énergie par cycle en mJ (Surface Q-V)
+energie_mJ = np.abs(np.trapz(Q_t, V_t)) 
+puissance_lissajous = energie_mJ * (freq / 1000)
 
 # Chimie et Cinétique
-oh_initial = (puissance_active * (hum/100) * ALPHA) / (1 + (temp/1000))
-o3_ppm = (puissance_active * (1 - hum/100) * 0.045) * np.exp(-temp / 85)
+oh_initial = (puissance_lissajous * (hum/100) * ALPHA) / (1 + (temp/1000))
+o3_ppm = (puissance_lissajous * (1 - hum/100) * 0.045) * np.exp(-temp / 85)
 t_transit = (dist_cm / 100) / v_flux
 k_decay = 120 * (1 + (temp / 100))
 oh_final = oh_initial * np.exp(-k_decay * t_transit)
@@ -142,8 +147,8 @@ oh_final = oh_initial * np.exp(-k_decay * t_transit)
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Production ·OH", f"{oh_final:.2f} ppm")
 c2.metric("Résiduel O3", f"{o3_ppm:.2f} ppm")
-c3.metric("Puissance Active", f"{puissance_active:.1f} W")
-c4.metric("Capacité Réacteur", f"{C_UNIT*1e12:.1f} pF")
+c3.metric("Puissance (Lissajous)", f"{puissance_lissajous:.1f} W")
+c4.metric("Énergie / Cycle", f"{energie_mJ:.2f} mJ")
 
 st.divider()
 
@@ -154,6 +159,8 @@ g1, g2 = st.columns(2)
 
 with g1:
     st.subheader("⚡ Caractéristique I(V)")
+    v_range = np.linspace(0, v_peak, 100)
+    i_plasma_unit = np.where(v_range > V_TH, 0.00065 * (v_range - V_TH)**1.55, 1e-7)
     fig_iv = go.Figure()
     fig_iv.add_trace(go.Scatter(x=v_range, y=i_plasma_unit * 1000 * nb_reacteurs, fill='tozeroy', line=dict(color='#FF00FF', width=3)))
     fig_iv.update_layout(xaxis_title="V (kV)", yaxis_title="I (mA)", template="plotly_dark", height=300)
@@ -168,14 +175,18 @@ with g2:
     fig_oh.update_layout(xaxis_title="Distance (cm)", yaxis_title="·OH (ppm)", template="plotly_dark", height=300)
     st.plotly_chart(fig_oh, use_container_width=True)
 
-st.subheader("🌀 Analyse de Lissajous (Cycle Q-V)")
 
-t_liss = np.linspace(0, 1/freq, 500)
-V_t = v_peak * np.sin(2 * np.pi * freq * t_liss)
-Q_t = (C_UNIT * nb_reacteurs * 1e6) * v_peak * (np.sin(2 * np.pi * freq * t_liss + 0.8) + 0.05 * np.sign(V_t))
+st.subheader("🌀 Analyse de Lissajous (Cycle de Charge-Tension Q-V)")
 fig_liss = go.Figure()
-fig_liss.add_trace(go.Scatter(x=V_t, y=Q_t, mode='lines', line=dict(color='#ADFF2F', width=4)))
-fig_liss.update_layout(xaxis_title="Tension v(t) [kV]", yaxis_title="Charge q(t) [µC]", template="plotly_dark", height=400)
+fig_liss.add_trace(go.Scatter(x=V_t, y=Q_t, mode='lines', line=dict(color='#ADFF2F', width=4), fill='toself'))
+fig_liss.update_layout(
+    xaxis_title="Tension Instantanée v(t) [kV]", 
+    yaxis_title="Charge accumulée q(t) [µC]", 
+    template="plotly_dark", 
+    height=450,
+    xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+    yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
+)
 st.plotly_chart(fig_liss, use_container_width=True)
 
 # =================================================================
@@ -194,14 +205,14 @@ with col_save:
             "Heure": datetime.now().strftime("%H:%M:%S"),
             "V_peak (kV)": v_peak,
             "Freq (Hz)": freq,
-            "Hum (%)": hum,
             "OH_final (ppm)": round(oh_final, 3),
-            "P_Watt": round(puissance_active, 1)
+            "Energie (mJ)": round(energie_mJ, 2),
+            "P_Watt": round(puissance_lissajous, 1)
         }
         st.session_state.historique.append(nouveau_test)
         try:
             db.reference('/historique_tests').push(nouveau_test)
-            st.toast("Test archivé sur Firebase !")
+            st.toast("Données synchronisées avec Firebase !")
         except:
             st.warning("Archivage local uniquement.")
 
@@ -209,7 +220,7 @@ if st.session_state.historique:
     df_hist = pd.DataFrame(st.session_state.historique)
     st.table(df_hist)
     csv = df_hist.to_csv(index=False).encode('utf-8')
-    st.download_button("📂 Télécharger Rapport CSV", data=csv, file_name="plasma_test_report.csv", mime="text/csv")
+    st.download_button("📂 Exporter en CSV", data=csv, file_name="plasma_report_udl.csv", mime="text/csv")
 
 # =================================================================
 # 9. PIED DE PAGE
@@ -217,8 +228,8 @@ if st.session_state.historique:
 st.divider()
 f1, f2 = st.columns(2)
 with f1:
-    st.error("⚠️ Sécurité : Haute Tension (35kV). Ventilation obligatoire.")
+    st.error("⚠️ Sécurité : Haute Tension (35kV). Utilisation de lunettes de protection UV obligatoire.")
 with f2:
-    st.info(f"Dimensions : {rayon_interne}mm (r_int) | Flux : {v_flux} m/s")
+    st.info(f"Paramètres Géométriques : r_int={rayon_interne}mm | Gap={gap_gaz}mm | L={longueur_decharge}mm")
 
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
