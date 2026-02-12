@@ -12,7 +12,7 @@ import time
 st.set_page_config(page_title="TTGO Plasma System - UDL-SBA", layout="wide")
 
 # Rappel du titre mémorisé exigé
-st.title("⚡ Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA")
+st.title("⚡ Plateforme de monitoring à distance de la génération des oxcidants hybrides OH-/O3")
 st.markdown("### Unité de Contrôle Hybride (Simulation & Expérimental)")
 st.caption(f"Département d'Électrotechnique - UDL-SBA | Date : {datetime.now().strftime('%d/%m/%Y')}")
 
@@ -139,3 +139,4 @@ with st.expander("📚 Physique du modèle"):
     st.write(f"Vitesse d'acquisition TTGO : 115200 bauds")
 
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
