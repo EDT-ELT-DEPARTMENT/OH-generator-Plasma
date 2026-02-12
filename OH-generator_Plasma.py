@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import segno
+import os
 from io import BytesIO
 from datetime import datetime
 import firebase_admin
@@ -17,29 +18,14 @@ st.set_page_config(
     page_icon="⚡"
 )
 
-# --- CONNEXION FIREBASE ---
-if not firebase_admin._apps:
-    try:
-        import os  # Assurez-vous que cette ligne est bien présente tout en haut du fichier avec les autres imports
-
 # --- CONNEXION FIREBASE (VERSION CORRIGÉE) ---
 if not firebase_admin._apps:
     try:
-        # Cette partie permet à Python de trouver le fichier peu importe comment vous lancez le script
+        # Détection automatique du chemin du fichier JSON
         chemin_actuel = os.path.dirname(os.path.abspath(__file__))
         chemin_cle = os.path.join(chemin_actuel, 'cle_firebase.json')
         
-        # =================================================================
-# 1. CONFIGURATION DE LA PAGE ET CONNEXION
-# =================================================================
-import os
-
-if not firebase_admin._apps:
-    try:
-        # Localisation du fichier dans le dossier "Traitement par OH-"
-        chemin_actuel = os.path.dirname(os.path.abspath(__file__))
-        chemin_cle = os.path.join(chemin_actuel, 'cle_firebase.json')
-        
+        # Initialisation avec l'URL de votre base de données
         cred = credentials.Certificate(chemin_cle)
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://oh-generator-plasma-default-rtdb.europe-west1.firebasedatabase.app/' 
@@ -53,7 +39,7 @@ if not firebase_admin._apps:
 # =================================================================
 def get_live_metrics():
     try:
-        # On pointe vers le nœud 'mesures' que vous créerez dans Firebase
+        # Récupération des données sous le nœud 'mesures'
         ref = db.reference('/mesures')
         return ref.get()
     except Exception:
@@ -64,15 +50,10 @@ live_data = get_live_metrics()
 # =================================================================
 # 3. TITRE ET ENTÊTE OFFICIEL
 # =================================================================
-# (La suite de votre code reste inchangée...)
-
-# =================================================================
-# 3. TITRE ET ENTÊTE OFFICIEL
-# =================================================================
 st.title("⚡ Start-up-OH Generator Plasma")
-st.markdown("### OH-generator Plasma - Système Intelligent de Traitement des Fumées")
+st.markdown("### Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA")
 st.markdown("#### Optimisation de la Production de Radicaux (·OH) par Commande Adaptive IA")
-st.caption(f"Département d'Électrotechnique - Faculté de Génie Électrique - UDL-SBA | Date : {datetime.now().strftime('%d/%m/%Y')}")
+st.caption(f"Système Intelligent de Traitement des Fumées | Date : {datetime.now().strftime('%d/%m/%Y')}")
 
 st.divider()
 
@@ -94,7 +75,7 @@ with st.sidebar:
     
     st.header("⚙️ Paramètres Opérationnels")
     
-    # Logique de basculement Auto/Manuel
+    # Logique de basculement entre données réelles et simulation
     if live_data:
         st.info("📡 Mode : Temps Réel (Données du Labo)")
         v_peak = float(live_data.get('tension', 25.0))
@@ -102,7 +83,6 @@ with st.sidebar:
         hum = int(live_data.get('humidite', 70))
         temp = int(live_data.get('temperature', 60))
         
-        # Affichage informatif des valeurs reçues
         st.write(f"**Tension reçue :** {v_peak} kV")
         st.write(f"**Fréquence reçue :** {freq} Hz")
     else:
@@ -114,7 +94,6 @@ with st.sidebar:
     
     st.divider()
     
-    # Section Monitoring QR Code
     st.subheader("📱 Monitoring Mobile")
     url_app = "https://oh-generator-plasma.streamlit.app"
     qr = segno.make(url_app)
@@ -122,7 +101,6 @@ with st.sidebar:
     qr.save(qr_buf, kind='png', scale=4)
     st.image(qr_buf.getvalue(), caption="Accès distant")
     
-    # Sécurité
     if st.button("🛑 ARRÊT D'URGENCE", type="primary", use_container_width=True):
         st.error("HAUTE TENSION COUPÉE - SYSTÈME SÉCURISÉ")
 
@@ -131,33 +109,26 @@ with st.sidebar:
 # =================================================================
 with st.expander("📚 Bases Physico-Chimiques et Équations du Modèle"):
     st.markdown("### 1. Modélisation Électrique Multi-Réacteur")
-    st.write("La puissance totale est proportionnelle au nombre de réacteurs $n$ en parallèle :")
+    st.write("La puissance totale est proportionnelle au nombre de réacteurs $n$ :")
     st.latex(r"P_{active} = n \cdot \left( \frac{1}{2} C_{unit} V_{peak}^2 f \right)")
-    st.latex(r"I_{total} = n \cdot k \cdot (V - V_{th})^{1.55}")
     
     st.markdown("### 2. Génération de Radicaux Hydroxyles (·OH)")
-    st.write("La production dépend de l'énergie des électrons et de la densité de vapeur d'eau :")
     st.latex(r"e^- + H_2O \rightarrow e^- + \cdot OH + H\cdot")
     st.latex(r"[\cdot OH]_{ppm} = \frac{P_{active} \cdot \text{Humidité} \cdot \alpha}{1 + \frac{T}{1000}}")
     
-    st.markdown("### 3. Cinétique et Dégradation de l'Ozone (O3)")
-    st.write("L'ozone est instable thermiquement. Son taux de survie suit une loi d'Arrhenius simplifiée :")
+    st.markdown("### 3. Stabilité de l'Ozone (O3)")
     st.latex(r"[O_3]_{final} = [O_3]_{initial} \cdot e^{-\frac{T}{\beta}}")
-    st.info("Où β (bêta) est la constante de stabilité thermique (≈ 85°C pour ce réacteur).")
 
 # =================================================================
-# 6. MOTEUR DE CALCUL (LOGIQUE IA)
+# 6. MOTEUR DE CALCUL
 # =================================================================
-# Paramètres fixes du design basés sur vos instructions
 C_UNIT = 150e-12 
 V_TH = 12.0
 ALPHA = 0.09  
 BETA = 85     
 
-# Calcul de la puissance
+# Calcul de la puissance et de l'intensité
 puissance_active = (0.5 * (C_UNIT * nb_reacteurs) * (v_peak * 1000)**2) * freq
-
-# Calcul de l'intensité
 v_range = np.linspace(0, v_peak, 100)
 i_plasma_unit = np.where(v_range > V_TH, 0.00065 * (v_range - V_TH)**1.55, 1e-7)
 i_peak_ma = (i_plasma_unit[-1] * 1000) * nb_reacteurs
@@ -193,30 +164,19 @@ with g1:
         fill='tozeroy', 
         line=dict(color='#FF00FF', width=4)
     ))
-    fig_iv.update_layout(
-        xaxis_title="Tension (kV)", 
-        yaxis_title="Intensité Totale (mA)", 
-        template="plotly_dark",
-        margin=dict(l=20, r=20, t=40, b=20)
-    )
+    fig_iv.update_layout(xaxis_title="Tension (kV)", yaxis_title="mA", template="plotly_dark")
     st.plotly_chart(fig_iv, use_container_width=True)
 
 with g2:
     st.subheader("📈 Concentrations des Espèces")
     t_sim = np.linspace(0, 60, 50)
-    # Ajout d'un petit bruit pour le réalisme visuel
     oh_noise = oh_ppm + np.random.normal(0, oh_ppm*0.02, 50)
     o3_noise = o3_ppm + np.random.normal(0, o3_ppm*0.02, 50)
     
     fig_chem = go.Figure()
-    fig_chem.add_trace(go.Scatter(x=t_sim, y=oh_noise, name="·OH", line=dict(color='#00FBFF', width=3)))
+    fig_chem.add_trace(go.Scatter(x=t_sim, y=oh_noise, name="·OH", line=dict(color='#00FBFF')))
     fig_chem.add_trace(go.Scatter(x=t_sim, y=o3_noise, name="O3", line=dict(color='orange', dash='dash')))
-    fig_chem.update_layout(
-        xaxis_title="Temps (s)", 
-        yaxis_title="Concentration (ppm)", 
-        template="plotly_dark",
-        margin=dict(l=20, r=20, t=40, b=20)
-    )
+    fig_chem.update_layout(xaxis_title="Temps (s)", yaxis_title="ppm", template="plotly_dark")
     st.plotly_chart(fig_chem, use_container_width=True)
 
 # =================================================================
@@ -228,29 +188,19 @@ f1, f2 = st.columns(2)
 with f1:
     st.subheader("📝 Fiche Technique du Réacteur")
     st.markdown(f"""
-    **SPÉCIFICATIONS MÉCANIQUES**
     - **Type :** DBD Coaxial (Cylindrique)
-    - **Longueur active :** 200 mm
     - **Électrode centrale :** Ø 10 mm (Inox 316L)
-    - **Diélectrique :** Quartz (Ø ext 24 mm, épaisseur 2 mm)
-    - **Gap de décharge :** 5 mm
-    
-    **PERFORMANCES CIBLES**
+    - **Diélectrique :** Quartz (épaisseur 2 mm)
     - **Capacité Unitaire :** {C_UNIT*1e12} pF
-    - **Taux OH optimal :** 20 - 35 ppm
     """)
 
 with f2:
     st.subheader("⚠️ Notice de Sécurité (UDL-SBA)")
-    st.warning("**HAUTE TENSION :** Risque d'électrocution. Ne pas manipuler sans mise à la terre.")
-    st.warning("**OZONE :** Gaz toxique. Utilisation obligatoire sous hotte aspirante.")
-    st.warning("**RAYONNEMENT UV :** Ne pas regarder la décharge sans lunettes de protection.")
-    st.warning("**TEMPÉRATURE :** Risque de brûlure sur le tube de quartz (P > 200W).")
+    st.warning("**HAUTE TENSION :** Risque d'électrocution. Mise à la terre obligatoire.")
+    st.warning("**OZONE :** Gaz toxique. Utilisation sous hotte uniquement.")
 
 # =================================================================
 # 10. PIED DE PAGE
 # =================================================================
 st.divider()
 st.markdown("<center>© 2026 OH-generator Plasma - Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
-
-
