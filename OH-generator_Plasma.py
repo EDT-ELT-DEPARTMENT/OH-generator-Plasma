@@ -5,8 +5,6 @@ import plotly.graph_objects as go
 import segno
 from io import BytesIO
 from datetime import datetime
-import firebase_admin
-from firebase_admin import credentials, db
 
 # =================================================================
 # 1. CONFIGURATION DE LA PAGE
@@ -16,19 +14,6 @@ st.set_page_config(
     layout="wide",
     page_icon="⚡"
 )
-
-# --- CONNEXION FIREBASE SÉCURISÉE ---
-if not firebase_admin._apps:
-    try:
-        fb_secrets = dict(st.secrets["firebase"])
-        fb_secrets["private_key"] = fb_secrets["private_key"].replace("\\n", "\n").strip()
-        
-        cred = credentials.Certificate(fb_secrets)
-        firebase_admin.initialize_app(cred, {
-            'databaseURL': 'https://oh-generator-plasma-sba-default-rtdb.firebaseio.com/' 
-        })
-    except Exception as e:
-        st.sidebar.error(f"⚠️ Mode Local (Firebase non connecté)")
 
 # =================================================================
 # 2. TITRE OFFICIEL
@@ -67,21 +52,14 @@ with st.sidebar:
     dist_cm = st.slider("Distance d'injection (cm)", 0, 50, 2)
     v_flux = st.slider("Vitesse du flux (m/s)", 1, 30, 20)
 
-    # QR Code
-    url_app = "https://oh-generator-plasma.streamlit.app"
-    qr = segno.make(url_app)
-    qr_buf = BytesIO()
-    qr.save(qr_buf, kind='png', scale=4)
-    st.image(qr_buf.getvalue(), caption="Scanner pour Monitoring Mobile")
-
 # =================================================================
-# 4. MOTEUR DE CALCUL PHYSIQUE (MODÈLE DE MANLEY AMÉLIORÉ)
+# 4. MOTEUR PHYSIQUE (MODÈLE DE MANLEY & CHIMIE)
 # =================================================================
 EPS_0 = 8.854e-12
 EPS_R = 3.8
-V_TH = 13.5 # Seuil d'amorçage réaliste en kV
+V_TH = 13.5 # Tension de claquage du gaz (kV)
 
-# Capacités
+# Capacités du modèle (Loi de Gauss en cylindrique)
 C_d = (2 * np.pi * EPS_0 * EPS_R * (L_act/1000)) / np.log((r_int + e_q)/r_int)
 C_g = (2 * np.pi * EPS_0 * 1.0 * (L_act/1000)) / np.log((r_int + e_q + d_gap)/(r_int + e_q))
 C_eq = (C_d * C_g) / (C_d + C_g)
@@ -90,50 +68,45 @@ C_eq = (C_d * C_g) / (C_d + C_g)
 t = np.linspace(0, 1/freq, 1000)
 V_t = v_peak * np.sin(2 * np.pi * freq * t)
 
-# Génération de la boucle de charge Q(V)
+# Modélisation de la Charge Q(t) - Cycle de décharge
 Q_t = []
 for v in V_t:
     if v > V_TH:
+        # Gaz conducteur : la pente suit la capacité du diélectrique
         q = C_d * (v - V_TH) + C_eq * V_TH
     elif v < -V_TH:
         q = C_d * (v + V_TH) - C_eq * V_TH
     else:
+        # Gaz isolant : la pente suit la capacité équivalente série
         q = C_eq * v
-    Q_t.append(q * 1e6 * n_react) # Conversion en µC
+    Q_t.append(q * 1e6 * n_react)
 
 Q_t = np.array(Q_t)
 
-# Calcul de l'aire de Lissajous (Puissance)
-def shoelace_area(x, y):
+# Calcul de l'aire par la méthode Shoelace (Surface de Lissajous)
+def get_lissajous_area(x, y):
     return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
 
-energie_mJ = shoelace_area(V_t, Q_t)
+energie_mJ = get_lissajous_area(V_t, Q_t)
 puissance_w = energie_mJ * (freq / 1000)
 
-# =================================================================
-# 5. MODÈLES CHIMIQUES (OH ET O3)
-# =================================================================
-
-# --- MODÈLE OH ---
-# Production favorisée par l'humidité et la puissance
-ALPHA_OH = 1.45
-oh_init = (puissance_w * (hum/100) * ALPHA_OH) / (1 + (temp/1000))
-k_decay_oh = 85 * (1 + (temp / 100))
+# --- CALCUL OH ---
+ALPHA_OH = 1.6 # Coefficient de conversion
+oh_init = (puissance_w * (hum/100) * ALPHA_OH) / (1 + (temp/800))
+k_decay_oh = 80 * (1 + (temp / 100))
 t_transit = (dist_cm / 100) / v_flux
 oh_final = oh_init * np.exp(-k_decay_oh * t_transit)
 
-# --- MODÈLE OZONE (O3) ---
-# 1. L'ozone est produit par l'oxygène (inverse de l'humidité)
-# 2. Sa décomposition thermique est exponentielle avec T (Loi d'Arrhenius simplifiée)
-BETA_O3 = 0.25 # Coefficient de production
-# Facteur de destruction thermique : k = A * exp(-Ea / RT)
-# Ici simplifié : l'ozone chute de moitié tous les 50°C après 60°C
-thermal_destruction = np.exp(-(temp - 20) / 60) 
-o3_init = (puissance_w * (1 - hum/100) * BETA_O3) * thermal_destruction
+# --- CALCUL OZONE (O3) ---
+BETA_O3 = 0.35 # Coefficient de production O3
+# Décomposition thermique : O3 chute radicalement quand T augmente
+# Modèle exponentiel : décroissance rapide après 50°C
+thermal_decay_o3 = np.exp(-(temp - 20) / 55) 
+o3_init = (puissance_w * (1 - hum/100) * BETA_O3) * thermal_decay_o3
 o3_final = max(0.0, o3_init)
 
 # =================================================================
-# 6. INDICATEURS (METRICS)
+# 5. AFFICHAGE DES RÉSULTATS (METRICS)
 # =================================================================
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Production ·OH", f"{oh_final:.2f} ppm")
@@ -144,17 +117,17 @@ c4.metric("Énergie / Cycle", f"{energie_mJ:.2f} mJ")
 st.divider()
 
 # =================================================================
-# 7. VISUALISATION
+# 6. VISUALISATION
 # =================================================================
 g1, g2 = st.columns(2)
 
 with g1:
     st.subheader("⚡ Caractéristique I(V) du Plasma")
-    v_range = np.linspace(0, v_peak, 100)
-    # Courant de conduction (filamentaire)
-    i_cond = np.where(v_range > V_TH, 0.01 * (v_range - V_TH)**1.5, 0)
+    
+    v_plot = np.linspace(0, v_peak, 100)
+    i_cond = np.where(v_plot > V_TH, 0.012 * (v_plot - V_TH)**1.6, 1e-6)
     fig_iv = go.Figure()
-    fig_iv.add_trace(go.Scatter(x=v_range, y=i_cond * 1000, fill='tozeroy', line=dict(color='#FF00FF', width=3)))
+    fig_iv.add_trace(go.Scatter(x=v_plot, y=i_cond * 1000 * n_react, fill='tozeroy', line=dict(color='#FF00FF', width=3)))
     fig_iv.update_layout(xaxis_title="Tension (kV)", yaxis_title="Courant (mA)", template="plotly_dark")
     st.plotly_chart(fig_iv, use_container_width=True)
 
@@ -163,13 +136,13 @@ with g2:
     
     fig_liss = go.Figure()
     fig_liss.add_trace(go.Scatter(x=V_t, y=Q_t, fill="toself", line=dict(color='#ADFF2F', width=4)))
-    fig_liss.update_layout(xaxis_title="Tension (kV)", yaxis_title="Charge (µC)", template="plotly_dark")
+    fig_liss.update_layout(xaxis_title="Tension v(t) [kV]", yaxis_title="Charge q(t) [µC]", template="plotly_dark")
     st.plotly_chart(fig_liss, use_container_width=True)
 
 # =================================================================
-# 8. ANALYSE ET PIED DE PAGE
+# 7. PIED DE PAGE ET ANALYSE
 # =================================================================
-st.info(f"💡 **Analyse du modèle :** À {temp}°C, le taux d'ozone est réduit par un facteur thermique de {thermal_destruction:.2f}. "
-        "Pour augmenter l'ozone, baissez la température ou réduisez l'humidité.")
+st.info(f"💡 **Rappel Électrotechnique :** La surface de Lissajous représente l'énergie dissipée par claquage des micro-décharges. "
+        f"À {temp}°C, l'Ozone est instable. Pour augmenter sa concentration, le refroidissement du réacteur est nécessaire.")
 
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
