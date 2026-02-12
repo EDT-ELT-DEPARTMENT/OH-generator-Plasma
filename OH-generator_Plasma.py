@@ -29,13 +29,20 @@ if not firebase_admin._apps:
         chemin_actuel = os.path.dirname(os.path.abspath(__file__))
         chemin_cle = os.path.join(chemin_actuel, 'cle_firebase.json')
         
+        # =================================================================
+# 1. CONFIGURATION DE LA PAGE ET CONNEXION
+# =================================================================
+import os
+
+if not firebase_admin._apps:
+    try:
+        # Localisation du fichier dans le dossier "Traitement par OH-"
+        chemin_actuel = os.path.dirname(os.path.abspath(__file__))
+        chemin_cle = os.path.join(chemin_actuel, 'cle_firebase.json')
+        
         cred = credentials.Certificate(chemin_cle)
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://oh-generator-plasma-default-rtdb.europe-west1.firebasedatabase.app/' 
-        })
-        st.sidebar.success("✅ Connecté au Cloud Firebase")
-    except Exception as e:
-        st.sidebar.error(f"❌ Erreur de connexion Cloud : {e}")
         })
         st.sidebar.success("✅ Connecté au Cloud Firebase")
     except Exception as e:
@@ -46,12 +53,18 @@ if not firebase_admin._apps:
 # =================================================================
 def get_live_metrics():
     try:
+        # On pointe vers le nœud 'mesures' que vous créerez dans Firebase
         ref = db.reference('/mesures')
         return ref.get()
-    except:
+    except Exception:
         return None
 
 live_data = get_live_metrics()
+
+# =================================================================
+# 3. TITRE ET ENTÊTE OFFICIEL
+# =================================================================
+# (La suite de votre code reste inchangée...)
 
 # =================================================================
 # 3. TITRE ET ENTÊTE OFFICIEL
@@ -239,4 +252,5 @@ with f2:
 # =================================================================
 st.divider()
 st.markdown("<center>© 2026 OH-generator Plasma - Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
 
