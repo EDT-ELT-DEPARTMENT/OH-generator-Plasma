@@ -17,16 +17,21 @@ st.set_page_config(
     page_icon="⚡"
 )
 
-# --- CONNEXION FIREBASE ---
+# --- CONNEXION FIREBASE SÉCURISÉE (STREAMLIT SECRETS) ---
 if not firebase_admin._apps:
     try:
-        cred = credentials.Certificate('cle_firebase.json') 
+        # On extrait les données du dictionnaire "firebase" créé dans l'onglet Secrets
+        fb_creds = dict(st.secrets["firebase"])
+        
+        # Initialisation avec les secrets chargés en mémoire
+        cred = credentials.Certificate(fb_creds)
         firebase_admin.initialize_app(cred, {
-            'databaseURL': 'https://votre-projet-default-rtdb.firebaseio.com/' 
+            'databaseURL': 'https://votre-projet-default-rtdb.firebaseio.com/' # <--- VERIFIE BIEN CETTE URL
         })
-        st.sidebar.success("✅ Connecté au Cloud Firebase")
+        st.sidebar.success("✅ Connecté au Cloud Firebase via Secrets")
     except Exception as e:
-        st.sidebar.warning("🔌 Mode local : cle_firebase.json non détectée")
+        st.sidebar.error(f"❌ Erreur de configuration Cloud : {e}")
+        st.info("Vérifiez que vous avez bien rempli l'onglet 'Secrets' sur Streamlit Cloud.")
 
 # =================================================================
 # 2. TITRE ET ENTÊTE
@@ -175,3 +180,4 @@ with s2:
     st.info(f"Temps de transit : {t_transit*1000:.2f} ms")
 
 st.markdown("<center>© 2026 OH-generator Plasma - Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
