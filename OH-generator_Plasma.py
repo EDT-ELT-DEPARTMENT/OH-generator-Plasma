@@ -211,3 +211,4 @@ with f2:
     st.info(f"Dimensions : {rayon_interne}x{longueur_decharge}mm | Flux : {v_flux} m/s")
 
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
