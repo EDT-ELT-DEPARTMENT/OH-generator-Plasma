@@ -1,10 +1,4 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-from datetime import datetime
-import serial
-import time
+
 
 # =================================================================
 # 1. CONFIGURATION ET TITRE
@@ -132,3 +126,4 @@ with g2:
 
 st.error("⚠️ Sécurité : Haute Tension. Production d'ozone. Utiliser sous hotte aspirante.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
