@@ -33,9 +33,19 @@ with st.sidebar:
         port_com = st.text_input("Port COM (ex: COM3)", value="COM3")
         
         try:
+            # Sécurité : Fermer toute connexion existante avant d'en ouvrir une nouvelle
+            if 'ser' in globals():
+                try:
+                    ser.close()
+                except:
+                    pass
+            
             # Initialisation série
-            ser = serial.Serial(port_com, 115200, timeout=1)
-            st.success(f"{choix_carte} connectée sur {port_com}")
+            ser = serial.Serial(port_com, 115200, timeout=2)
+            time.sleep(2)  # Pause cruciale pour laisser la Wemos s'initialiser
+            ser.reset_input_buffer() # Vide les vieilles données du buffer
+            
+            st.success(f"✅ {choix_carte} connectée sur {port_com}")
             
             # Lecture des données (Format attendu du Wemos : Temp,Hum)
             line = ser.readline().decode('utf-8').strip()
@@ -132,3 +142,4 @@ with g2:
 
 st.error("⚠️ Sécurité : Haute Tension. Production d'ozone. Utiliser sous hotte aspirante.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
