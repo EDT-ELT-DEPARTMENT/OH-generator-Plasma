@@ -30,7 +30,7 @@ with st.sidebar:
         st.header("🔌 Configuration Matérielle")
         # Sélection de la carte
         choix_carte = st.selectbox("Choisir la carte :", ["Wemos D1 Mini (ESP8266)", "TTGO T-Internet-POE (ESP32)"])
-        port_com = st.text_input("Port COM (ex: COM3)", value="COM3")
+        port_com = st.text_input("Port COM (ex: COM3)", value="COM9")
         
         try:
             # Sécurité : Fermer toute connexion existante avant d'en ouvrir une nouvelle
@@ -142,4 +142,5 @@ with g2:
 
 st.error("⚠️ Sécurité : Haute Tension. Production d'ozone. Utiliser sous hotte aspirante.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
 
