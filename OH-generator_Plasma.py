@@ -5,11 +5,15 @@ import plotly.graph_objects as go
 from datetime import datetime
 import serial
 import time
+from streamlit_autorefresh import st_autorefresh
 
 # =================================================================
 # 1. CONFIGURATION ET TITRE
 # =================================================================
 st.set_page_config(page_title="Plasma Monitoring - UDL-SBA", layout="wide")
+
+# Rafraîchissement automatique toutes les 2000ms (2 secondes)
+st_autorefresh(interval=2000, key="datarefresh")
 
 st.title("⚡ Plateforme de monitoring à distance de la génération des oxcidants hybrides OH-/O3")
 st.markdown("### Unité de Contrôle Hybride (Simulation & Expérimental)")
@@ -30,25 +34,25 @@ with st.sidebar:
         st.header("🔌 Configuration Matérielle")
         choix_carte = st.selectbox("Choisir la carte :", ["Wemos D1 Mini (ESP8266)", "TTGO T-Internet-POE (ESP32)"])
         
-        # Champ de saisie pour le port (on garde COM5 en mémoire)
+        # On force COM5 par défaut comme demandé
         port_com = st.text_input("Port COM", value="COM5")
         
         # Bouton d'initialisation unique
-        if st.button("🔌 Connecter au Réacteur"):
+        if st.button("🔌 Initialiser la connexion"):
             try:
-                # Si une connexion existe déjà, on la ferme proprement
+                # Fermeture propre de l'ancienne instance
                 if 'ser' in st.session_state and st.session_state.ser is not None:
                     st.session_state.ser.close()
                 
-                # Ouverture de la nouvelle connexion
+                # Ouverture de la connexion sur COM5
                 st.session_state.ser = serial.Serial(port_com, 115200, timeout=1)
-                time.sleep(2)  # Pause pour la stabilisation de la Wemos
-                st.success(f"✅ Liaison établie sur {port_com}")
+                time.sleep(2) 
+                st.success(f"✅ Liaison COM5 établie !")
             except Exception as e:
-                st.error(f"❌ Erreur critique : {e}")
+                st.error(f"❌ Erreur : {e}")
                 st.session_state.ser = None
 
-        # Gestion de la lecture si la connexion est active
+        # Lecture des données en temps réel
         if 'ser' in st.session_state and st.session_state.ser is not None and st.session_state.ser.is_open:
             try:
                 st.session_state.ser.reset_input_buffer()
@@ -59,18 +63,15 @@ with st.sidebar:
                     hum = float(data[1])
                     v_peak, freq = 23.0, 15000 
                 else:
-                    # Valeurs de sécurité si le flux est vide
                     v_peak, freq, temp, hum = 23.0, 15000, 45.0, 75.0
             except Exception:
-                st.warning("⚠️ Flux de données instable...")
                 v_peak, freq, temp, hum = 23.0, 15000, 45.0, 75.0
         else:
-            # Mode "Attente de connexion"
             v_peak, freq, temp, hum = 23.0, 15000, 45.0, 75.0
             
     else:
-        # Suite du code (Mode Simulation)...
         st.header("💻 Mode Simulation")
+        choix_carte = "Simulateur"
         v_peak = st.slider("Tension Crête Vp (kV)", 10.0, 35.0, 23.0)
         freq = st.slider("Fréquence f (Hz)", 1000, 25000, 15000)
         temp = st.slider("Température T (°C)", 20, 250, 45)
@@ -82,7 +83,7 @@ with st.sidebar:
     L_act = st.number_input("Longueur Active (L) [mm]", value=150.0)
 
 # =================================================================
-# 3. MOTEUR DE CALCUL (CONSERVÉ)
+# 3. MOTEUR DE CALCUL
 # =================================================================
 EPS_0 = 8.854e-12
 EPS_R_QUARTZ = 3.8
@@ -126,7 +127,6 @@ col8.metric("V-Seuil (Vth)", f"{v_th:.2f} kV")
 
 st.divider()
 
-# Section Graphiques (Lissajous et Performance)
 g1, g2 = st.columns(2)
 with g1:
     st.subheader("🌀 Figure de Lissajous")
@@ -149,8 +149,3 @@ with g2:
 
 st.error("⚠️ Sécurité : Haute Tension. Production d'ozone. Utiliser sous hotte aspirante.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
-
-
-
-
-
