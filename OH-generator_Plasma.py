@@ -30,8 +30,8 @@ with st.sidebar:
         st.header("🔌 Configuration Matérielle")
         choix_carte = st.selectbox("Choisir la carte :", ["Wemos D1 Mini (ESP8266)", "TTGO T-Internet-POE (ESP32)"])
         
-        # Champ de saisie pour le port (on garde COM9 en mémoire)
-        port_com = st.text_input("Port COM", value="COM9")
+        # Champ de saisie pour le port (on garde COM5 en mémoire)
+        port_com = st.text_input("Port COM", value="COM5")
         
         # Bouton d'initialisation unique
         if st.button("🔌 Connecter au Réacteur"):
@@ -149,6 +149,7 @@ with g2:
 
 st.error("⚠️ Sécurité : Haute Tension. Production d'ozone. Utiliser sous hotte aspirante.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
 
 
 
