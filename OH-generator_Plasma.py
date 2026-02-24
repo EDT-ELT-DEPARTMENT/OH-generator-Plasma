@@ -21,7 +21,7 @@ st.caption(f"Département d'Électrotechnique - UDL-SBA | Date : {datetime.now()
 
 st.divider()
 
-# Initialisation sécurisée des variables de session
+# Initialisation des variables persistantes
 if 'last_temp' not in st.session_state:
     st.session_state.last_temp = 45.0
 if 'last_hum' not in st.session_state:
@@ -30,7 +30,7 @@ if 'ser' not in st.session_state:
     st.session_state.ser = None
 
 # =================================================================
-# 2. BARRE LATÉRALE : SÉLECTION DU MODE ET CARTES
+# 2. BARRE LATÉRALE
 # =================================================================
 with st.sidebar:
     st.header("🎮 Mode de Fonctionnement")
@@ -47,6 +47,7 @@ with st.sidebar:
             try:
                 if st.session_state.ser is not None:
                     st.session_state.ser.close()
+                # On ouvre le port COM5
                 st.session_state.ser = serial.Serial(port_com, 115200, timeout=1)
                 time.sleep(2)
                 st.success(f"✅ Liaison {port_com} établie !")
@@ -54,6 +55,7 @@ with st.sidebar:
                 st.error(f"❌ Erreur : {e}")
                 st.session_state.ser = None
 
+        # Lecture du flux série
         if st.session_state.ser and st.session_state.ser.is_open:
             try:
                 st.session_state.ser.reset_input_buffer()
@@ -63,8 +65,9 @@ with st.sidebar:
                     if len(parts) >= 2:
                         st.session_state.last_temp = float(parts[0])
                         st.session_state.last_hum = float(parts[1])
+                
                 temp, hum = st.session_state.last_temp, st.session_state.last_hum
-                v_peak, freq = 23.0, 15000.0 
+                v_peak, freq = 23.0, 15000.0
             except Exception:
                 temp, hum = st.session_state.last_temp, st.session_state.last_hum
                 v_peak, freq = 23.0, 15000.0
@@ -75,7 +78,6 @@ with st.sidebar:
     else:
         st.header("💻 Mode Simulation")
         choix_carte = "Simulateur"
-        # CORRECTION : Utilisation de floats (points décimaux) partout pour éviter l'erreur API
         v_peak = st.slider("Tension Crête Vp (kV)", 10.0, 35.0, 23.0)
         freq = st.slider("Fréquence f (Hz)", 1000.0, 25000.0, 15000.0)
         temp = st.slider("Température T (°C)", 20.0, 250.0, 45.0)
@@ -109,7 +111,7 @@ pct_o3 = (o3_final / total * 100.0) if total > 0 else 0.0
 g_value = (oh_final * 40.0) / p_watt if p_watt > 0 else 0.0
 
 # =================================================================
-# 4. AFFICHAGE DES RÉSULTATS
+# 4. AFFICHAGE
 # =================================================================
 label_mode = f"🔴 EXPÉRIMENTAL ({choix_carte})" if mode_experimental else "🔵 SIMULATION"
 st.subheader(f"État du Système : {label_mode}")
@@ -131,20 +133,20 @@ st.divider()
 g1, g2 = st.columns(2)
 with g1:
     st.subheader("🌀 Figure de Lissajous")
-    t_plot = np.linspace(0, 2*np.pi, 500)
-    v_sin = v_peak * np.sin(t_plot)
-    q_sin = (C_die * 1e6 * v_peak) * np.cos(t_plot) 
+    t_p = np.linspace(0, 2*np.pi, 500)
+    v_s = v_peak * np.sin(t_p)
+    q_s = (C_die * 1e6 * v_peak) * np.cos(t_p) 
     fig_q = go.Figure()
-    fig_q.add_trace(go.Scatter(x=v_sin, y=q_sin, fill="toself", line=dict(color='#ADFF2F', width=2)))
+    fig_q.add_trace(go.Scatter(x=v_s, y=q_s, fill="toself", line=dict(color='#ADFF2F', width=2)))
     fig_q.update_layout(template="plotly_dark", xaxis_title="Tension (kV)", yaxis_title="Charge (µC)")
     st.plotly_chart(fig_q, use_container_width=True)
 
 with g2:
     st.subheader("📊 Performance vs Tension")
-    v_range = np.linspace(10, 35, 100)
-    oh_curve = [k_oh * (4 * freq * C_die * (v_th * 1000.0) * ((v - v_th) * 1000.0) * 2) if v > v_th else 0 for v in v_range]
+    v_r = np.linspace(10, 35, 100)
+    oh_c = [k_oh * (4 * freq * C_die * (v_th * 1000.0) * ((v - v_th) * 1000.0) * 2) if v > v_th else 0 for v in v_r]
     fig_v = go.Figure()
-    fig_v.add_trace(go.Scatter(x=v_range, y=oh_curve, name="·OH (ppm)", line=dict(color='#00FBFF')))
+    fig_v.add_trace(go.Scatter(x=v_r, y=oh_c, name="·OH (ppm)", line=dict(color='#00FBFF')))
     fig_v.update_layout(template="plotly_dark", xaxis_title="Tension (kV)", yaxis_title="Concentration (ppm)")
     st.plotly_chart(fig_v, use_container_width=True)
 
