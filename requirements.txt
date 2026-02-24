@@ -5,3 +5,4 @@ plotly
 segno
 firebase-admin
 pyserial
+streamlit-autorefresh
