@@ -10,7 +10,10 @@ from streamlit_autorefresh import st_autorefresh
 # =================================================================
 # 1. CONFIGURATION ET TITRE
 # =================================================================
-st.set_page_config(page_title="Plasma Monitoring - UDL-SBA", layout="wide")
+st.set_page_config(
+    page_title="Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA",
+    layout="wide"
+)
 
 # Rafraîchissement automatique toutes les 2 secondes
 st_autorefresh(interval=2000, key="datarefresh")
@@ -21,16 +24,27 @@ st.caption(f"Département d'Électrotechnique - UDL-SBA | Date : {datetime.now()
 
 st.divider()
 
-# Initialisation des variables de session pour éviter les sauts de valeurs
+# Initialisation des variables persistantes dans la session
 if 'last_temp' not in st.session_state:
     st.session_state.last_temp = 45.0
 if 'last_hum' not in st.session_state:
     st.session_state.last_hum = 75.0
-if 'ser' not in st.session_state:
-    st.session_state.ser = None
 
 # =================================================================
-# 2. BARRE LATÉRALE
+# 2. GESTION DE LA CONNEXION SÉRIE (ANTI-CLIGNOTEMENT)
+# =================================================================
+@st.cache_resource
+def initialiser_serie(port):
+    """Ouvre la connexion une seule fois et la garde en cache"""
+    try:
+        ser = serial.Serial(port, 115200, timeout=0.1)
+        time.sleep(2) # Temps de stabilisation
+        return ser
+    except Exception as e:
+        return None
+
+# =================================================================
+# 3. BARRE LATÉRALE : CONFIGURATION
 # =================================================================
 with st.sidebar:
     st.header("🎮 Mode de Fonctionnement")
@@ -43,34 +57,29 @@ with st.sidebar:
         choix_carte = st.selectbox("Choisir la carte :", ["Wemos D1 Mini (ESP8266)", "TTGO T-Internet-POE (ESP32)"])
         port_com = st.text_input("Port COM", value="COM5")
         
-        if st.button("🔌 Initialiser la connexion"):
+        # Tentative de récupération de la connexion
+        ser_conn = initialiser_serie(port_com)
+        
+        if ser_conn and ser_conn.is_open:
+            st.success(f"✅ Connecté sur {port_com}")
             try:
-                if st.session_state.ser is not None:
-                    st.session_state.ser.close()
-                st.session_state.ser = serial.Serial(port_com, 115200, timeout=1)
-                time.sleep(2)
-                st.success(f"✅ Liaison {port_com} établie avec succès !")
-            except Exception as e:
-                st.error(f"❌ Erreur : {e}")
-                st.session_state.ser = None
-
-        # Tentative de lecture des données réelles
-        if st.session_state.ser and st.session_state.ser.is_open:
-            try:
-                st.session_state.ser.reset_input_buffer()
-                line = st.session_state.ser.readline().decode('utf-8', errors='ignore').strip()
+                # Lecture du flux série
+                ser_conn.reset_input_buffer()
+                line = ser_conn.readline().decode('utf-8', errors='ignore').strip()
                 if line and ',' in line:
                     parts = line.split(',')
                     if len(parts) >= 2:
                         st.session_state.last_temp = float(parts[0])
                         st.session_state.last_hum = float(parts[1])
                 
-                temp, hum = st.session_state.last_temp, st.session_state.last_hum
+                temp = st.session_state.last_temp
+                hum = st.session_state.last_hum
                 v_peak, freq = 23.0, 15000.0
             except Exception:
                 temp, hum = st.session_state.last_temp, st.session_state.last_hum
                 v_peak, freq = 23.0, 15000.0
         else:
+            st.error("❌ COM5 non détecté. Fermez l'IDE Arduino !")
             temp, hum = st.session_state.last_temp, st.session_state.last_hum
             v_peak, freq = 23.0, 15000.0
             
@@ -88,7 +97,7 @@ with st.sidebar:
     L_act = st.number_input("Longueur Active (L) [mm]", value=150.0)
 
 # =================================================================
-# 3. MOTEUR DE CALCUL PHYSIQUE
+# 4. MOTEUR DE CALCUL (PHYSIQUE DU PLASMA)
 # =================================================================
 EPS_0 = 8.854e-12
 EPS_R_QUARTZ = 3.8
@@ -97,8 +106,10 @@ R_ext, R_int = 4.0, 2.5
 v_th = 13.2 * (1 + 0.05 * np.sqrt(d_gap)) 
 C_die = (2 * np.pi * EPS_0 * EPS_R_QUARTZ * (L_act/1000.0)) / np.log(R_ext / R_int)
 
+# Calcul de la puissance selon Manley
 p_watt = 4 * freq * C_die * (v_th * 1000.0) * ((v_peak - v_th) * 1000.0) * 2 if v_peak > v_th else 0.0
 
+# Modélisation des oxydants
 k_oh = 0.03554
 oh_final = k_oh * p_watt * (hum/75.0) * np.exp(-(temp - 45.0) / 200.0)
 k_o3 = 0.00129 
@@ -110,7 +121,7 @@ pct_o3 = (o3_final / total * 100.0) if total > 0 else 0.0
 g_value = (oh_final * 40.0) / p_watt if p_watt > 0 else 0.0
 
 # =================================================================
-# 4. AFFICHAGE DES RÉSULTATS
+# 5. AFFICHAGE DES RÉSULTATS
 # =================================================================
 label_mode = f"🔴 EXPÉRIMENTAL ({choix_carte})" if mode_experimental else "🔵 SIMULATION"
 st.subheader(f"État du Système : {label_mode}")
@@ -129,24 +140,25 @@ c8.metric("V-Seuil (Vth)", f"{v_th:.2f} kV")
 
 st.divider()
 
+# Graphiques dynamiques
 g1, g2 = st.columns(2)
 with g1:
     st.subheader("🌀 Figure de Lissajous")
     
-    t_plot = np.linspace(0, 2*np.pi, 500)
-    v_sin = v_peak * np.sin(t_plot)
-    q_sin = (C_die * 1e6 * v_peak) * np.cos(t_plot) 
+    t_p = np.linspace(0, 2*np.pi, 500)
+    v_s = v_peak * np.sin(t_p)
+    q_s = (C_die * 1e6 * v_peak) * np.cos(t_p) 
     fig_q = go.Figure()
-    fig_q.add_trace(go.Scatter(x=v_sin, y=q_sin, fill="toself", line=dict(color='#ADFF2F', width=2)))
+    fig_q.add_trace(go.Scatter(x=v_s, y=q_s, fill="toself", line=dict(color='#ADFF2F', width=2)))
     fig_q.update_layout(template="plotly_dark", xaxis_title="Tension (kV)", yaxis_title="Charge (µC)")
     st.plotly_chart(fig_q, use_container_width=True)
 
 with g2:
     st.subheader("📊 Performance vs Tension")
-    v_range = np.linspace(10, 35, 100)
-    oh_curve = [k_oh * (4 * freq * C_die * (v_th * 1000.0) * ((v - v_th) * 1000.0) * 2) if v > v_th else 0 for v in v_range]
+    v_r = np.linspace(10, 35, 100)
+    oh_c = [k_oh * (4 * freq * C_die * (v_th * 1000.0) * ((v - v_th) * 1000.0) * 2) if v > v_th else 0 for v in v_r]
     fig_v = go.Figure()
-    fig_v.add_trace(go.Scatter(x=v_range, y=oh_curve, name="·OH (ppm)", line=dict(color='#00FBFF')))
+    fig_v.add_trace(go.Scatter(x=v_r, y=oh_c, name="·OH (ppm)", line=dict(color='#00FBFF')))
     fig_v.update_layout(template="plotly_dark", xaxis_title="Tension (kV)", yaxis_title="Concentration (ppm)")
     st.plotly_chart(fig_v, use_container_width=True)
 
