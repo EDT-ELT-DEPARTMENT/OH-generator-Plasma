@@ -30,24 +30,26 @@ with st.sidebar:
         st.header("🔌 Configuration Matérielle")
         choix_carte = st.selectbox("Choisir la carte :", ["Wemos D1 Mini (ESP8266)", "TTGO T-Internet-POE (ESP32)"])
         
-        # ON FORCE COM9 PAR DÉFAUT ICI
-        port_com = st.text_input("Port COM (ex: COM3)", value="COM9")
+        # Champ de saisie pour le port (on garde COM9 en mémoire)
+        port_com = st.text_input("Port COM", value="COM9")
         
-        if st.button("🔌 Initialiser la connexion"):
+        # Bouton d'initialisation unique
+        if st.button("🔌 Connecter au Réacteur"):
             try:
-                # Nettoyage des anciennes connexions pour éviter l'Errno 2
-                if 'ser' in st.session_state:
+                # Si une connexion existe déjà, on la ferme proprement
+                if 'ser' in st.session_state and st.session_state.ser is not None:
                     st.session_state.ser.close()
                 
-                # Création de la nouvelle connexion
-                st.session_state.ser = serial.Serial(port_com, 115200, timeout=2)
-                time.sleep(2) # Temps pour le reboot de la Wemos
-                st.success(f"✅ Connecté sur {port_com}")
+                # Ouverture de la nouvelle connexion
+                st.session_state.ser = serial.Serial(port_com, 115200, timeout=1)
+                time.sleep(2)  # Pause pour la stabilisation de la Wemos
+                st.success(f"✅ Liaison établie sur {port_com}")
             except Exception as e:
-                st.error(f"❌ Erreur : {e}")
+                st.error(f"❌ Erreur critique : {e}")
+                st.session_state.ser = None
 
-        # Lecture des données si la connexion existe
-        if 'ser' in st.session_state and st.session_state.ser.is_open:
+        # Gestion de la lecture si la connexion est active
+        if 'ser' in st.session_state and st.session_state.ser is not None and st.session_state.ser.is_open:
             try:
                 st.session_state.ser.reset_input_buffer()
                 line = st.session_state.ser.readline().decode('utf-8').strip()
@@ -57,14 +59,17 @@ with st.sidebar:
                     hum = float(data[1])
                     v_peak, freq = 23.0, 15000 
                 else:
-                    st.info("📡 Réception des flux... (Vérifiez le format Valeur1,Valeur2)")
+                    # Valeurs de sécurité si le flux est vide
                     v_peak, freq, temp, hum = 23.0, 15000, 45.0, 75.0
-            except:
+            except Exception:
+                st.warning("⚠️ Flux de données instable...")
                 v_peak, freq, temp, hum = 23.0, 15000, 45.0, 75.0
         else:
+            # Mode "Attente de connexion"
             v_peak, freq, temp, hum = 23.0, 15000, 45.0, 75.0
             
     else:
+        # Suite du code (Mode Simulation)...
         st.header("💻 Mode Simulation")
         v_peak = st.slider("Tension Crête Vp (kV)", 10.0, 35.0, 23.0)
         freq = st.slider("Fréquence f (Hz)", 1000, 25000, 15000)
@@ -144,6 +149,7 @@ with g2:
 
 st.error("⚠️ Sécurité : Haute Tension. Production d'ozone. Utiliser sous hotte aspirante.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
 
 
 
