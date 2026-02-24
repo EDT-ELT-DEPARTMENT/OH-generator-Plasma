@@ -28,40 +28,42 @@ with st.sidebar:
     
     if mode_experimental:
         st.header("🔌 Configuration Matérielle")
-        # Sélection de la carte
         choix_carte = st.selectbox("Choisir la carte :", ["Wemos D1 Mini (ESP8266)", "TTGO T-Internet-POE (ESP32)"])
+        
+        # ON FORCE COM9 PAR DÉFAUT ICI
         port_com = st.text_input("Port COM (ex: COM3)", value="COM9")
         
-        try:
-            # Sécurité : Fermer toute connexion existante avant d'en ouvrir une nouvelle
-            if 'ser' in globals():
-                try:
-                    ser.close()
-                except:
-                    pass
-            
-            # Initialisation série
-            ser = serial.Serial(port_com, 115200, timeout=2)
-            time.sleep(2)  # Pause cruciale pour laisser la Wemos s'initialiser
-            ser.reset_input_buffer() # Vide les vieilles données du buffer
-            
-            st.success(f"✅ {choix_carte} connectée sur {port_com}")
-            
-            # Lecture des données (Format attendu du Wemos : Temp,Hum)
-            line = ser.readline().decode('utf-8').strip()
-            if line:
-                data = line.split(',')
-                # Adaptation selon les données reçues
-                temp = float(data[0])
-                hum = float(data[1])
-                # Valeurs par défaut pour le reste en attendant les autres capteurs
-                v_peak, freq = 23.0, 15000 
-            else:
-                st.warning("En attente des données du capteur...")
+        if st.button("🔌 Initialiser la connexion"):
+            try:
+                # Nettoyage des anciennes connexions pour éviter l'Errno 2
+                if 'ser' in st.session_state:
+                    st.session_state.ser.close()
+                
+                # Création de la nouvelle connexion
+                st.session_state.ser = serial.Serial(port_com, 115200, timeout=2)
+                time.sleep(2) # Temps pour le reboot de la Wemos
+                st.success(f"✅ Connecté sur {port_com}")
+            except Exception as e:
+                st.error(f"❌ Erreur : {e}")
+
+        # Lecture des données si la connexion existe
+        if 'ser' in st.session_state and st.session_state.ser.is_open:
+            try:
+                st.session_state.ser.reset_input_buffer()
+                line = st.session_state.ser.readline().decode('utf-8').strip()
+                if line and ',' in line:
+                    data = line.split(',')
+                    temp = float(data[0])
+                    hum = float(data[1])
+                    v_peak, freq = 23.0, 15000 
+                else:
+                    st.info("📡 Réception des flux... (Vérifiez le format Valeur1,Valeur2)")
+                    v_peak, freq, temp, hum = 23.0, 15000, 45.0, 75.0
+            except:
                 v_peak, freq, temp, hum = 23.0, 15000, 45.0, 75.0
-        except Exception as e:
-            st.error(f"Erreur : Carte non détectée. ({e})")
+        else:
             v_peak, freq, temp, hum = 23.0, 15000, 45.0, 75.0
+            
     else:
         st.header("💻 Mode Simulation")
         v_peak = st.slider("Tension Crête Vp (kV)", 10.0, 35.0, 23.0)
@@ -142,5 +144,6 @@ with g2:
 
 st.error("⚠️ Sécurité : Haute Tension. Production d'ozone. Utiliser sous hotte aspirante.")
 st.markdown("<center>© 2026 OH-generator Plasma - Département d'Électrotechnique UDL-SBA</center>", unsafe_allow_html=True)
+
 
 
