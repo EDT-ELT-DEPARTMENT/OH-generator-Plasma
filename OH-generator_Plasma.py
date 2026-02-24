@@ -12,7 +12,7 @@ from streamlit_autorefresh import st_autorefresh
 # =================================================================
 st.set_page_config(page_title="Plasma Monitoring - UDL-SBA", layout="wide")
 
-# Rafraîchissement automatique toutes les 2 secondes pour le flux série
+# Rafraîchissement automatique toutes les 2 secondes
 st_autorefresh(interval=2000, key="datarefresh")
 
 st.title("⚡ Plateforme de monitoring à distance de la génération des oxcidants hybrides OH-/O3")
@@ -21,7 +21,7 @@ st.caption(f"Département d'Électrotechnique - UDL-SBA | Date : {datetime.now()
 
 st.divider()
 
-# Initialisation des variables de session (Persistance des données)
+# Initialisation des variables de session pour éviter les sauts de valeurs
 if 'last_temp' not in st.session_state:
     st.session_state.last_temp = 45.0
 if 'last_hum' not in st.session_state:
@@ -30,7 +30,7 @@ if 'ser' not in st.session_state:
     st.session_state.ser = None
 
 # =================================================================
-# 2. BARRE LATÉRALE : SÉLECTION DU MODE ET CONFIGURATION
+# 2. BARRE LATÉRALE
 # =================================================================
 with st.sidebar:
     st.header("🎮 Mode de Fonctionnement")
@@ -47,15 +47,14 @@ with st.sidebar:
             try:
                 if st.session_state.ser is not None:
                     st.session_state.ser.close()
-                # Initialisation du port série
                 st.session_state.ser = serial.Serial(port_com, 115200, timeout=1)
-                time.sleep(2) # Stabilisation du capteur DHT22
-                st.success(f"✅ Liaison {port_com} établie !")
+                time.sleep(2)
+                st.success(f"✅ Liaison {port_com} établie avec succès !")
             except Exception as e:
                 st.error(f"❌ Erreur : {e}")
                 st.session_state.ser = None
 
-        # Tentative de lecture si le port est ouvert
+        # Tentative de lecture des données réelles
         if st.session_state.ser and st.session_state.ser.is_open:
             try:
                 st.session_state.ser.reset_input_buffer()
@@ -98,10 +97,8 @@ R_ext, R_int = 4.0, 2.5
 v_th = 13.2 * (1 + 0.05 * np.sqrt(d_gap)) 
 C_die = (2 * np.pi * EPS_0 * EPS_R_QUARTZ * (L_act/1000.0)) / np.log(R_ext / R_int)
 
-# Calcul Puissance (Manley)
 p_watt = 4 * freq * C_die * (v_th * 1000.0) * ((v_peak - v_th) * 1000.0) * 2 if v_peak > v_th else 0.0
 
-# Oxydants
 k_oh = 0.03554
 oh_final = k_oh * p_watt * (hum/75.0) * np.exp(-(temp - 45.0) / 200.0)
 k_o3 = 0.00129 
@@ -118,7 +115,6 @@ g_value = (oh_final * 40.0) / p_watt if p_watt > 0 else 0.0
 label_mode = f"🔴 EXPÉRIMENTAL ({choix_carte})" if mode_experimental else "🔵 SIMULATION"
 st.subheader(f"État du Système : {label_mode}")
 
-# Metrics corrigées
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Production ·OH", f"{oh_final:.2f} ppm", f"{pct_oh:.1f} %")
 c2.metric("Production O3", f"{o3_final:.2f} ppm", f"{pct_o3:.1f} %")
@@ -136,6 +132,7 @@ st.divider()
 g1, g2 = st.columns(2)
 with g1:
     st.subheader("🌀 Figure de Lissajous")
+    
     t_plot = np.linspace(0, 2*np.pi, 500)
     v_sin = v_peak * np.sin(t_plot)
     q_sin = (C_die * 1e6 * v_peak) * np.cos(t_plot) 
