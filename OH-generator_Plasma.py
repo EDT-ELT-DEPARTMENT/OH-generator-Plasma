@@ -79,11 +79,10 @@ def generer_pdf_datasheet():
     pdf.cell(190, 8, txt="- Longueur active : 150 mm", ln=True)
     pdf.cell(190, 8, txt="- Capteurs : MQ-9, MQ-135, DHT22, ZMPT101B", ln=True)
     
-    # Retourne directement les bytes pour st.download_button
     return pdf.output()
 
 # =================================================================
-# PAGE 1 : MONITORING TEMPS RÉEL (VOTRE CODE INITIAL)
+# PAGE 1 : MONITORING TEMPS RÉEL
 # =================================================================
 if page == "📊 Monitoring Temps Réel":
     st_autorefresh(interval=2000, key="datarefresh")
@@ -97,21 +96,34 @@ if page == "📊 Monitoring Temps Réel":
 
     with st.sidebar:
         st.header("🎮 Contrôle du Système")
-        mode_experimental = st.toggle("🚀 Activer Mode Expérimental (Wemos D1)", value=False)
+        mode_experimental = st.toggle("🚀 Activer Mode Expérimental", value=False)
         st.divider()
         
         if mode_experimental:
+            # --- AJOUT DU CHOIX DE LA CARTE ---
             st.header("🔌 Réception [MESURÉE]")
+            carte_active = st.selectbox(
+                "📡 Choisir l'unité source :",
+                ["Wemos D1 Mini (WiFi)", "TTGO T-Internet-POE (Ethernet)"]
+            )
+            
+            # Définition du chemin Firebase selon la carte
+            fb_path = "/EDT_SBA/Wemos" if "Wemos" in carte_active else "/EDT_SBA/TTGO"
+            st.caption(f"Flux actif : `{fb_path}`")
+
             if initialiser_firebase():
                 try:
-                    ref = db.reference('/EDT_SBA')
+                    ref = db.reference(fb_path)
                     data_cloud = ref.get()
                     if data_cloud:
                         st.session_state.last_temp = float(data_cloud.get('temperature', 23.0))
                         st.session_state.last_hum = float(data_cloud.get('humidite', 45.0))
-                        st.success("✅ Capteurs en ligne")
+                        st.success(f"✅ {carte_active} en ligne")
+                    else:
+                        st.warning("⚠️ Pas de données sur ce flux")
                 except Exception as e:
                     st.error(f"Erreur flux : {e}")
+            
             temp, hum = st.session_state.last_temp, st.session_state.last_hum
             v_peak, freq = 23.0, 15000.0
         else:
@@ -137,7 +149,9 @@ if page == "📊 Monitoring Temps Réel":
     g_value = (oh_final * 40.0) / p_watt if p_watt > 0 else 0.0
 
     # --- AFFICHAGE ---
-    st.subheader(f"Statut : {'🔴 MODE RÉEL' if mode_experimental else '🔵 MODE SIMULATION'}")
+    status_text = f"🔴 MODE RÉEL ({carte_active})" if mode_experimental else "🔵 MODE SIMULATION"
+    st.subheader(f"Statut : {status_text}")
+    
     m1, m2 = st.columns(2)
     m1.metric("Température", f"{temp:.1f} °C", delta=f"{temp-25:.1f}°")
     m2.metric("Humidité relative", f"{hum:.1f} %")
@@ -164,7 +178,7 @@ if page == "📊 Monitoring Temps Réel":
         st.plotly_chart(fig_oh, use_container_width=True)
 
 # =================================================================
-# PAGE 2 : PROTOTYPE & DATASHEET (NOUVELLE PAGE)
+# PAGE 2 : PROTOTYPE & DATASHEET
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Architecture & Spécifications")
@@ -175,11 +189,10 @@ elif page == "🔬 Prototype & Datasheet":
     
     with col_img:
         st.subheader("🖼️ Vue du Prototype (Design Corrigé)")
-        # L'image doit être nommée 'prototype.jpg' dans le même dossier
         try:
             st.image("prototype.jpg", caption="Système Hybride : Ligne 2 optimisée avec sortie haute.", use_container_width=True)
         except:
-            st.error("⚠️ Image 'prototype.jpg' introuvable à la racine du projet.")
+            st.error("⚠️ Image 'prototype.jpg' introuvable.")
     
     with col_desc:
         st.subheader("📝 Principe & Datasheet")
@@ -190,7 +203,6 @@ elif page == "🔬 Prototype & Datasheet":
         où l'énergie du plasma froid dissocie les molécules d'eau en radicaux hydroxyles.
         """)
         
-        # Bouton de téléchargement PDF
         try:
             pdf_data = generer_pdf_datasheet()
             st.download_button(
@@ -203,60 +215,55 @@ elif page == "🔬 Prototype & Datasheet":
             st.error(f"Erreur PDF : {e}")
 
     st.divider()
-    st.subheader("📐 Détails Techniques & Capteurs")
-    
-    # =================================================================
-# TABLEAU TECHNIQUE DE COMPOSITION DU PROTOTYPE (CORRIGÉ)
-# =================================================================
-st.subheader("📐 Architecture & Nomenclature des Composants")
+    st.subheader("📐 Architecture & Nomenclature des Composants")
 
-data_tab = {
-    "Bloc/Foction": [
-        "Filtration Électrostatique", 
-        "Ionisation Diélectrique", 
-        "Analyse de Combustion", 
-        "Analyse de Neutralisation", 
-        "Supervision & IHM"
-    ],
-    "Code (Référence)": [
-        "ESP-MOD-01", 
-        "DBD-RECT-150", 
-        "MQ-9-SENS", 
-        "MQ-135-SENS", 
-        "WEMOS-D1-R1"
-    ],
-    "Mode et plage de fonctionnemet": [
-        "Continu", 
-        "15-25 kHz", 
-        "Temps Réel", 
-        "Temps Réel", 
-        "2.4 GHz (WiFi)"
-    ],
-    "Temps de traitement": [
-        "24h/24", 
-        "Cycle Traitement", 
-        "Permanent", 
-        "Permanent", 
-        "Cloud Sync"
-    ],
-    "Localisation": [
-        "Ligne 1 (Top)", 
-        "Ligne 2 (Bottom)", 
-        "Entrée Système", 
-        "Sortie Aspirateur", 
-        "Pupitre Commande"
-    ],
-    "Type de fonctionnemet": [
-        "Haute Tension", 
-        "Plasma Froid", 
-        "Analogique", 
-        "Analogique", 
-        "IoT / Firebase"
-    ]
-}
+    # Tableau technique mémorisé avec vos intitulés spécifiques
+    data_tab = {
+        "Bloc/Fonction": [
+            "Filtration Électrostatique", 
+            "Ionisation Diélectrique", 
+            "Analyse de Combustion", 
+            "Analyse de Neutralisation", 
+            "Supervision & IHM"
+        ],
+        "Code (Référence)": [
+            "ESP-MOD-01", 
+            "DBD-RECT-150", 
+            "MQ-9-SENS", 
+            "MQ-135-SENS", 
+            "WEMOS-D1-R1"
+        ],
+        "Mode et plage de fonctionnement": [
+            "Continu", 
+            "15-25 kHz", 
+            "Temps Réel", 
+            "Temps Réel", 
+            "2.4 GHz (WiFi)"
+        ],
+        "Temps de traitement": [
+            "24h/24", 
+            "Cycle Traitement", 
+            "Permanent", 
+            "Permanent", 
+            "Cloud Sync"
+        ],
+        "Localisation": [
+            "Ligne 1 (Top)", 
+            "Ligne 2 (Bottom)", 
+            "Entrée Système", 
+            "Sortie Aspirateur", 
+            "Pupitre Commande"
+        ],
+        "Type de fonctionnement": [
+            "Haute Tension", 
+            "Plasma Froid", 
+            "Analogique", 
+            "Analogique", 
+            "IoT / Firebase"
+        ]
+    }
 
-# Affichage du tableau avec Pandas pour une présentation propre
-st.table(pd.DataFrame(data_tab))
+    st.table(pd.DataFrame(data_tab))
 
 # =================================================================
 # PIED DE PAGE
@@ -264,6 +271,3 @@ st.table(pd.DataFrame(data_tab))
 st.warning("⚠️ Sécurité : Risque de Haute Tension. Système sous surveillance du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b></center>", unsafe_allow_html=True)
-
-
-
