@@ -12,7 +12,7 @@ from fpdf import FPDF  # Nécessite pip install fpdf2
 # 1. CONFIGURATION DE LA PAGE
 # =================================================================
 st.set_page_config(
-    page_title="Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA",
+    page_title="Station de supervision et commande d'une unité hybride de traitement de déchets hospitaliers par hydroxyle",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -22,7 +22,7 @@ st.sidebar.title("📂 Menu Principal")
 page = st.sidebar.radio("Navigation :", ["📊 Monitoring Temps Réel", "🔬 Prototype & Datasheet"])
 
 # Titre officiel rappelé systématiquement
-ST_TITRE_OFFICIEL = "Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA"
+ST_TITRE_OFFICIEL = "Plateforme de supervision et commande d'une unité hybride de traitement de déchets hospitaliers par hydroxyle"
 
 # =================================================================
 # 2. FONCTIONS DE SERVICE (FIREBASE & PDF)
@@ -205,15 +205,65 @@ elif page == "🔬 Prototype & Datasheet":
     st.divider()
     st.subheader("📐 Détails Techniques & Capteurs")
     
-    # Tableau selon votre disposition mémorisée
-    data_tab = {
-        "Enseignements (Composant)": ["ESP - Filtration", "DBD - Ionisation", "MQ-9 - Analyse CO", "MQ-135 - Qualité"],
-        "Code": ["Ligne 1", "Ligne 2", "Entrée", "Sortie"],
-        "Lieu": ["Amont", "Aval Humid.", "Collecteur", "Aspirateur"],
-        "Promotion": ["M2RE", "M2RE", "M2RE", "M2RE"],
-        "Jours": ["Lundi-Dim", "Lundi-Dim", "Lundi-Dim", "Lundi-Dim"]
-    }
-    st.table(pd.DataFrame(data_tab))
+    # =================================================================
+# TABLEAU TECHNIQUE DE COMPOSITION DU PROTOTYPE (CORRIGÉ)
+# =================================================================
+st.subheader("📐 Architecture & Nomenclature des Composants")
+
+data_tab = {
+    "Enseignements (Fonction)": [
+        "Filtration Électrostatique", 
+        "Ionisation Diélectrique", 
+        "Analyse de Combustion", 
+        "Analyse de Neutralisation", 
+        "Supervision & IHM"
+    ],
+    "Code (Référence)": [
+        "ESP-MOD-01", 
+        "DBD-RECT-150", 
+        "MQ-9-SENS", 
+        "MQ-135-SENS", 
+        "WEMOS-D1-R1"
+    ],
+    "Enseignants (Responsable)": [
+        "Filtre ESP", 
+        "Réacteur DBD", 
+        "Capteur CO", 
+        "Capteur NOx", 
+        "Microcontrôleur"
+    ],
+    "Horaire (Fréquence)": [
+        "Continu", 
+        "15-25 kHz", 
+        "Temps Réel", 
+        "Temps Réel", 
+        "2.4 GHz (WiFi)"
+    ],
+    "Jours (Disponibilité)": [
+        "24h/24", 
+        "Cycle Traitement", 
+        "Permanent", 
+        "Permanent", 
+        "Cloud Sync"
+    ],
+    "Lieu (Localisation)": [
+        "Ligne 1 (Top)", 
+        "Ligne 2 (Bottom)", 
+        "Entrée Système", 
+        "Sortie Aspirateur", 
+        "Pupitre Commande"
+    ],
+    "Promotion (Niveau)": [
+        "Haute Tension", 
+        "Plasma Froid", 
+        "Analogique", 
+        "Analogique", 
+        "IoT / Firebase"
+    ]
+}
+
+# Affichage du tableau avec Pandas pour une présentation propre
+st.table(pd.DataFrame(data_tab))
 
 # =================================================================
 # PIED DE PAGE
@@ -221,3 +271,4 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension. Système sous surveillance du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b></center>", unsafe_allow_html=True)
+
