@@ -187,41 +187,96 @@ elif page == "🔬 Prototype & Datasheet":
     st.divider()
 
     col_img, col_desc = st.columns([1.6, 1])
+    
     with col_img:
-        st.subheader("🖼️ Vue du Prototype")
+        st.subheader("🖼️ Vue du Prototype (Design Corrigé)")
         try:
-            st.image("prototype.jpg", caption="Unité hybride avec ventilateur d'aspiration variable.", use_container_width=True)
+            st.image("prototype.jpg", caption="Système Hybride : Ligne 2 optimisée avec sortie haute.", use_container_width=True)
         except:
             st.error("⚠️ Image 'prototype.jpg' introuvable.")
     
     with col_desc:
-        st.subheader("📝 Contrôle du Débit")
+        st.subheader("📝 Principe & Datasheet")
+        st.success("""
+        **Fonctionnement :**
+        L'air injecté en Ligne 2 est humidifié par un brumisateur ultrasonique. 
+        Le flux saturé sort par le haut pour alimenter directement le réacteur DBD 
+        où l'énergie du plasma froid dissocie les molécules d'eau en radicaux hydroxyles.
+        """)
+        
         st.info("""
-        Le débit est piloté par un signal PWM envoyé au ventilateur d'extraction. 
-        - **Débit faible :** Maximise la concentration et le temps de traitement.
-        - **Débit élevé :** Assure un renouvellement rapide de l'air de la chambre de stockage.
+        **Configuration Capteurs :**
+        * **MQ-9 :** Surveillance du CO avec compensation thermique logicielle.
+        * **DHT22 :** Acquisition de la température et de l'humidité relative.
+        * **MQ-135 :** Analyse de la qualité d'air et détection des NOx.
         """)
         
         try:
             pdf_data = generer_pdf_datasheet()
-            st.download_button(label="📥 Télécharger PDF", data=pdf_data, file_name="Datasheet_SBA_2026.pdf", mime="application/pdf")
+            st.download_button(
+                label="📥 Télécharger la Datasheet (PDF)",
+                data=pdf_data,
+                file_name="Datasheet_Hybride_SBA_2026.pdf",
+                mime="application/pdf"
+            )
         except Exception as e:
             st.error(f"Erreur PDF : {e}")
 
     st.divider()
-    
-    # =================================================================
-    # TABLEAU TECHNIQUE RÉVISÉ
-    # =================================================================
     st.subheader("📐 Architecture & Nomenclature des Composants")
+
+    # Tableau technique mis à jour avec TTGO et vos capteurs réels
     data_tab = {
-        "Bloc/Fonction": ["Filtration Électrostatique", "Ionisation Diélectrique", "Analyse de Combustion", "Analyse de Neutralisation", "Supervision & IHM"],
-        "Code (Référence)": ["ESP-MOD-01", "DBD-RECT-150", "MQ-9-SENS", "MQ-135-SENS", "WEMOS-D1-R1"],
-        "Mode et plage de fonctionnement": ["Continu", "15-25 kHz", "Temps Réel", "Temps Réel", "2.4 GHz (WiFi)"],
-        "Temps de traitement": ["24h/24", "Cycle Traitement", "Permanent", "Permanent", "Cloud Sync"],
-        "Localisation": ["Ligne 1 (Top)", "Ligne 2 (Bottom)", "Entrée Système", "Sortie Aspirateur", "Pupitre Commande"],
-        "Type de fonctionnement": ["Haute Tension", "Plasma Froid", "Analogique", "Analogique", "IoT / Firebase"]
+        "Bloc/Fonction": [
+            "Filtration Électrostatique", 
+            "Ionisation Diélectrique", 
+            "Analyse de Combustion (CO)", 
+            "Analyse des Rejets (NOx)", 
+            "Hygrométrie & Température",
+            "Supervision & IHM"
+        ],
+        "Code (Référence)": [
+            "ESP-MOD-01", 
+            "DBD-RECT-150", 
+            "MQ-9-SENS", 
+            "MQ-135-SENS", 
+            "DHT22-DIGITAL",
+            "TTGO-T-POE-V1"
+        ],
+        "Mode et plage de fonctionnement": [
+            "Continu", 
+            "15-25 kHz", 
+            "10-1000 ppm (Corrigé)", 
+            "Multi-gaz (Qualité air)", 
+            "-40 à 80°C / 0-100% HR",
+            "Dual-Core / Ethernet RJ45"
+        ],
+        "Temps de traitement": [
+            "24h/24", 
+            "Cycle Traitement", 
+            "Réel (Cycle 5V)", 
+            "Permanent", 
+            "Échantillonnage 2s",
+            "Cloud Sync / RTOS"
+        ],
+        "Localisation": [
+            "Ligne 1 (Top)", 
+            "Ligne 2 (Bottom)", 
+            "Chambre de Combustion", 
+            "Sortie Aspirateur", 
+            "Chambre de Réaction",
+            "Pupitre de Commande"
+        ],
+        "Type de fonctionnement": [
+            "Haute Tension", 
+            "Plasma Froid", 
+            "Analogique (Compensé)", 
+            "Analogique", 
+            "Numérique (One-Wire)",
+            "IoT / Firebase"
+        ]
     }
+
     st.table(pd.DataFrame(data_tab))
 
 # =================================================================
@@ -230,4 +285,3 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension. Système sous surveillance du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b></center>", unsafe_allow_html=True)
-
