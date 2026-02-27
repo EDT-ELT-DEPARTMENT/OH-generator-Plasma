@@ -225,35 +225,28 @@ data_tab = {
         "MQ-135-SENS", 
         "WEMOS-D1-R1"
     ],
-    "Enseignants (Responsable)": [
-        "Filtre ESP", 
-        "Réacteur DBD", 
-        "Capteur CO", 
-        "Capteur NOx", 
-        "Microcontrôleur"
-    ],
-    "Horaire (Fréquence)": [
+    "Mode et plage de fonctionnemet": [
         "Continu", 
         "15-25 kHz", 
         "Temps Réel", 
         "Temps Réel", 
         "2.4 GHz (WiFi)"
     ],
-    "Jours (Disponibilité)": [
+    "Temps de traitement": [
         "24h/24", 
         "Cycle Traitement", 
         "Permanent", 
         "Permanent", 
         "Cloud Sync"
     ],
-    "Lieu (Localisation)": [
+    "Localisation": [
         "Ligne 1 (Top)", 
         "Ligne 2 (Bottom)", 
         "Entrée Système", 
         "Sortie Aspirateur", 
         "Pupitre Commande"
     ],
-    "Promotion (Niveau)": [
+    "Type de fonctionnemet": [
         "Haute Tension", 
         "Plasma Froid", 
         "Analogique", 
@@ -271,5 +264,6 @@ st.table(pd.DataFrame(data_tab))
 st.warning("⚠️ Sécurité : Risque de Haute Tension. Système sous surveillance du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b></center>", unsafe_allow_html=True)
+
 
 
