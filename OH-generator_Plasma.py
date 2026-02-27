@@ -22,7 +22,7 @@ st.sidebar.title("📂 Menu Principal")
 page = st.sidebar.radio("Navigation :", ["📊 Monitoring Temps Réel", "🔬 Prototype & Datasheet"])
 
 # Titre officiel rappelé systématiquement
-ST_TITRE_OFFICIEL = "Plateforme de supervision et commande d'une unité hybride de traitement de déchets hospitaliers par hydroxyle"
+ST_TITRE_OFFICIEL = "Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA"
 
 # =================================================================
 # 2. FONCTIONS DE SERVICE (FIREBASE & PDF)
@@ -50,7 +50,7 @@ def initialiser_firebase():
         return False
 
 def generer_pdf_datasheet():
-    """Génère un export PDF de la fiche technique (Syntaxe fpdf2)"""
+    """Génère un export PDF de la fiche technique"""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
@@ -65,19 +65,9 @@ def generer_pdf_datasheet():
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(190, 10, txt="1. Architecture du Système", ln=True)
     pdf.set_font("Arial", size=10)
-    pdf.multi_cell(190, 8, txt="Ce prototype est conçu pour la génération d'oxydants hybrides (OH-/O3). "
-                               "Il se compose de deux lignes de traitement. La Ligne 2 (Réactive) "
-                               "utilise une chambre d'humidification unique connectée en série avec "
-                               "un réacteur DBD de grande dimension via sa sortie haute.")
-    
-    pdf.ln(5)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(190, 10, txt="2. Paramètres de Dimensionnement", ln=True)
-    pdf.set_font("Arial", size=10)
-    pdf.cell(190, 8, txt="- Diélectrique : Tube de Quartz (SiO2)", ln=True)
-    pdf.cell(190, 8, txt="- Gap de décharge : 3.0 mm", ln=True)
-    pdf.cell(190, 8, txt="- Longueur active : 150 mm", ln=True)
-    pdf.cell(190, 8, txt="- Capteurs : MQ-9, MQ-135, DHT22, ZMPT101B", ln=True)
+    pdf.multi_cell(190, 8, txt="Ce prototype utilise des générateurs d'ozone industriels NU-12V. "
+                               "L'innovation réside dans la conversion de l'Ozone en radicaux Hydroxyles "
+                               "par le biais d'une humidification contrôlée en amont du réacteur DBD.")
     
     return pdf.output()
 
@@ -91,8 +81,8 @@ if page == "📊 Monitoring Temps Réel":
     st.markdown(f"### {ST_TITRE_OFFICIEL}")
     st.info(f"📅 Date du jour : {datetime.now().strftime('%d/%m/%Y')}")
 
-    if 'last_temp' not in st.session_state: st.session_state.last_temp = 23.0
-    if 'last_hum' not in st.session_state: st.session_state.last_hum = 45.0
+    if 'last_temp' not in st.session_state: st.session_state.last_temp = 25.0
+    if 'last_hum' not in st.session_state: st.session_state.last_hum = 15.0
 
     with st.sidebar:
         st.header("🎮 Contrôle du Système")
@@ -100,14 +90,12 @@ if page == "📊 Monitoring Temps Réel":
         st.divider()
         
         if mode_experimental:
-            # --- AJOUT DU CHOIX DE LA CARTE ---
             st.header("🔌 Réception [MESURÉE]")
             carte_active = st.selectbox(
                 "📡 Choisir l'unité source :",
                 ["Wemos D1 Mini (WiFi)", "TTGO T-Internet-POE (Ethernet)"]
             )
             
-            # Définition du chemin Firebase selon la carte
             fb_path = "/EDT_SBA/Wemos" if "Wemos" in carte_active else "/EDT_SBA/TTGO"
             st.caption(f"Flux actif : `{fb_path}`")
 
@@ -116,66 +104,64 @@ if page == "📊 Monitoring Temps Réel":
                     ref = db.reference(fb_path)
                     data_cloud = ref.get()
                     if data_cloud:
-                        st.session_state.last_temp = float(data_cloud.get('temperature', 23.0))
-                        st.session_state.last_hum = float(data_cloud.get('humidite', 45.0))
+                        st.session_state.last_temp = float(data_cloud.get('temperature', 25.0))
+                        st.session_state.last_hum = float(data_cloud.get('humidite', 15.0))
                         st.success(f"✅ {carte_active} en ligne")
-                    else:
-                        st.warning("⚠️ Pas de données sur ce flux")
                 except Exception as e:
                     st.error(f"Erreur flux : {e}")
             
             temp, hum = st.session_state.last_temp, st.session_state.last_hum
-            v_peak, freq = 23.0, 15000.0
+            nb_gen = st.slider("Générateurs Actifs (Relais)", 0, 3, 1)
         else:
             st.header("💻 Mode [SIMULATION]")
-            v_peak = st.slider("Tension Crête Vp (kV) [SIM]", 10.0, 35.0, 23.0)
-            freq = st.slider("Fréquence f (Hz) [SIM]", 1000.0, 25000.0, 15000.0)
-            temp = st.slider("Température T (°C) [SIM]", 20.0, 100.0, 25.0)
-            hum = st.slider("Humidité H2O (%) [SIM]", 10.0, 95.0, 50.0)
+            nb_gen = st.select_slider("Nombre de générateurs NU 12V", options=[0, 1, 2, 3], value=1)
+            temp = st.slider("Température du Gaz T (°C)", 15.0, 80.0, 25.0)
+            hum = st.slider("Humidité Relative H (%)", 5.0, 95.0, 15.0)
         
         st.divider()
-        d_gap = st.number_input("Gap de décharge (d) [mm]", value=3.0, step=0.1)
-        L_act = st.number_input("Longueur Active (L) [mm]", value=150.0, step=1.0)
+        st.caption("Débit d'air constant : 6 m³/h")
 
-    # --- CALCULS PHYSIQUES ---
-    EPS_0, EPS_R_QUARTZ, R_ext, R_int = 8.854e-12, 3.8, 4.0, 2.5
-    v_th = 13.2 * (1 + 0.05 * np.sqrt(d_gap)) 
-    C_die = (2 * np.pi * EPS_0 * EPS_R_QUARTZ * (L_act/1000.0)) / np.log(R_ext / R_int)
-    p_watt = 4 * freq * C_die * (v_th * 1000.0) * ((v_peak - v_th) * 1000.0) * 2 if v_peak > v_th else 0.0
-    oh_final = 0.03554 * p_watt * (hum/100.0) * np.exp(-(temp - 25.0) / 150.0)
-    o3_final = 0.00129 * p_watt * (1.0 - hum/100.0) * np.exp(-(temp - 25.0) / 45.0) if v_peak > v_th else 0.0
-    total = oh_final + o3_final
-    pct_oh = (oh_final / total * 100.0) if total > 0 else 0.0
-    g_value = (oh_final * 40.0) / p_watt if p_watt > 0 else 0.0
+    # --- CALCULS PHYSIQUES : MODÈLE DE CONVERSION O3 -> OH ---
+    prod_nominale_mg_h = nb_gen * 10000 
+    
+    # Décroissance O3 (100% à 10% HR et 25°C)
+    facteur_H = np.exp(-0.022 * (hum - 10)) if hum > 10 else 1.0
+    facteur_T = np.exp(-0.025 * (temp - 25)) if temp > 25 else 1.0
+    
+    o3_mg_h_reel = prod_nominale_mg_h * facteur_H * facteur_T
+    
+    # Croissance OH (Conversion de la perte d'O3 par l'humidité)
+    perte_H = 1.0 - facteur_H
+    taux_conversion = 0.18 # Rendement de transformation radicalaire
+    oh_mg_h_reel = prod_nominale_mg_h * perte_H * taux_conversion * facteur_T
 
     # --- AFFICHAGE ---
-    status_text = f"🔴 MODE RÉEL ({carte_active})" if mode_experimental else "🔵 MODE SIMULATION"
+    status_text = f"🔴 MODE RÉEL ({nb_gen} GEN)" if mode_experimental else "🔵 MODE SIMULATION"
     st.subheader(f"Statut : {status_text}")
     
-    m1, m2 = st.columns(2)
+    m1, m2, m3 = st.columns(3)
     m1.metric("Température", f"{temp:.1f} °C", delta=f"{temp-25:.1f}°")
-    m2.metric("Humidité relative", f"{hum:.1f} %")
+    m2.metric("Humidité", f"{hum:.1f} %")
+    m3.metric("Production Ozone", f"{o3_mg_h_reel:.0f} mg/h")
 
-    st.markdown("#### ⚡ Résultats Physico-Chimiques")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Production ·OH", f"{oh_final:.2f} ppm", f"{pct_oh:.1f} %")
-    c2.metric("Production O3", f"{o3_final:.2f} ppm")
-    c3.metric("Puissance active", f"{p_watt:.1f} W")
-    c4.metric("Efficacité (G)", f"{g_value:.3f} g/kWh")
+    st.markdown("#### 🧪 Concentrations Estimées (PPM)")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Ozone (O3)", f"{(o3_mg_h_reel / 12.84):.2f} ppm")
+    c2.metric("Hydroxyle (·OH)", f"{(oh_mg_h_reel / 4.56):.2f} ppm")
+    c3.metric("Efficacité Globale", f"{(facteur_H * facteur_T * 100):.1f} %")
 
     st.divider()
-    g_left, g_right = st.columns(2)
-    with g_left:
-        t_vals = np.linspace(0, 2*np.pi, 500)
-        fig_lis = go.Figure(go.Scatter(x=v_peak * np.sin(t_vals), y=(C_die * 1e6 * v_peak) * np.cos(t_vals), fill="toself", line=dict(color='#ADFF2F')))
-        fig_lis.update_layout(template="plotly_dark", xaxis_title="U (kV)", yaxis_title="Q (µC)", title="Cycle de Charge")
-        st.plotly_chart(fig_lis, use_container_width=True)
-    with g_right:
-        v_range = np.linspace(10, 35, 100)
-        oh_curve = [0.03554 * (4 * freq * C_die * (v_th * 1000) * ((v - v_th) * 1000) * 2) * (hum/100) if v > v_th else 0 for v in v_range]
-        fig_oh = go.Figure(go.Scatter(x=v_range, y=oh_curve, line=dict(color='#00FBFF', width=3)))
-        fig_oh.update_layout(template="plotly_dark", xaxis_title="Tension (kV)", yaxis_title="·OH (ppm)", title="Modèle Cinétique")
-        st.plotly_chart(fig_oh, use_container_width=True)
+    
+    # Graphique de conversion
+    h_range = np.linspace(5, 95, 100)
+    o3_plot = [prod_nominale_mg_h * (np.exp(-0.022 * (h - 10)) if h > 10 else 1.0) * facteur_T for h in h_range]
+    oh_plot = [prod_nominale_mg_h * (1.0 - (np.exp(-0.022 * (h - 10)) if h > 10 else 1.0)) * taux_conversion * facteur_T for h in h_range]
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=h_range, y=o3_plot, name="Ozone (O3)", line=dict(color='cyan', width=3)))
+    fig.add_trace(go.Scatter(x=h_range, y=oh_plot, name="Hydroxyle (·OH)", line=dict(color='orange', width=3)))
+    fig.update_layout(template="plotly_dark", title="Dynamique de conversion O3 vers ·OH", xaxis_title="Humidité %", yaxis_title="mg/h")
+    st.plotly_chart(fig, use_container_width=True)
 
 # =================================================================
 # PAGE 2 : PROTOTYPE & DATASHEET
@@ -188,36 +174,29 @@ elif page == "🔬 Prototype & Datasheet":
     col_img, col_desc = st.columns([1.6, 1])
     
     with col_img:
-        st.subheader("🖼️ Vue du Prototype (Design Corrigé)")
+        st.subheader("🖼️ Vue du Prototype")
         try:
-            st.image("prototype.jpg", caption="Système Hybride : Ligne 2 optimisée avec sortie haute.", use_container_width=True)
+            st.image("prototype.jpg", caption="Unité hybride de traitement par hydroxyle.", use_container_width=True)
         except:
             st.error("⚠️ Image 'prototype.jpg' introuvable.")
     
     with col_desc:
-        st.subheader("📝 Principe & Datasheet")
-        st.success("""
-        **Fonctionnement :**
-        L'air injecté en Ligne 2 est humidifié par un brumisateur ultrasonique. 
-        Le flux saturé sort par le haut pour alimenter directement le réacteur DBD 
-        où l'énergie du plasma froid dissocie les molécules d'eau en radicaux hydroxyles.
-        """)
+        st.subheader("📝 Principe de fonctionnement")
+        st.info("Le système utilise l'effet Corona pour générer de l'ozone qui, en rencontrant un flux d'air saturé en humidité, se dissocie pour former des radicaux hydroxyles à haut potentiel d'oxydation.")
         
         try:
             pdf_data = generer_pdf_datasheet()
-            st.download_button(
-                label="📥 Télécharger la Datasheet (PDF)",
-                data=pdf_data,
-                file_name="Datasheet_Hybride_SBA_2026.pdf",
-                mime="application/pdf"
-            )
+            st.download_button(label="📥 Télécharger PDF", data=pdf_data, file_name="Datasheet_SBA_2026.pdf", mime="application/pdf")
         except Exception as e:
             st.error(f"Erreur PDF : {e}")
 
     st.divider()
+    
+    # =================================================================
+    # TABLEAU TECHNIQUE RÉVISÉ SELON VOS INSTRUCTIONS
+    # =================================================================
     st.subheader("📐 Architecture & Nomenclature des Composants")
 
-    # Tableau technique mémorisé avec vos intitulés spécifiques
     data_tab = {
         "Bloc/Fonction": [
             "Filtration Électrostatique", 
