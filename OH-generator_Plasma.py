@@ -65,7 +65,7 @@ def generer_pdf_datasheet():
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(190, 10, txt="1. Architecture du Système", ln=True)
     pdf.set_font("Arial", size=10)
-    pdf.multi_cell(190, 8, txt="Ce prototype utilise des générateurs d'ozone industriels NU-12V. "
+    pdf.multi_cell(190, 8, txt="Ce prototype utilise des générateurs d'ozone industriels NU-12V (10g/h par unité). "
                                "L'innovation réside dans la conversion de l'Ozone en radicaux Hydroxyles "
                                "par le biais d'une humidification contrôlée en amont du réacteur DBD.")
     
@@ -114,26 +114,31 @@ if page == "📊 Monitoring Temps Réel":
             nb_gen = st.slider("Générateurs Actifs (Relais)", 0, 3, 1)
         else:
             st.header("💻 Mode [SIMULATION]")
-            nb_gen = st.select_slider("Nombre de générateurs NU 12V", options=[0, 1, 2, 3], value=1)
-            temp = st.slider("Température du Gaz T (°C)", 15.0, 80.0, 25.0)
-            hum = st.slider("Humidité Relative H (%)", 5.0, 95.0, 15.0)
+            nb_gen = st.select_slider("Nombre de générateurs NU 12V (10g/h unité)", options=[0, 1, 2, 3], value=1)
+            temp = st.slider("Température du Gaz T (°C) [SIM]", 15.0, 80.0, 25.0)
+            hum = st.slider("Humidité Relative H (%) [SIM]", 5.0, 95.0, 15.0)
         
         st.divider()
         st.caption("Débit d'air constant : 6 m³/h")
 
-    # --- CALCULS PHYSIQUES : MODÈLE DE CONVERSION O3 -> OH ---
+    # =================================================================
+    # MOTEUR DE CALCUL (BASÉ SUR ÉTUDES ET PRODUCTION NU-12V)
+    # =================================================================
+    # 1. Capacité brute (10g/h = 10000 mg/h par module)
     prod_nominale_mg_h = nb_gen * 10000 
     
+    # 2. Facteurs de décroissance (Ozone)
     # Décroissance O3 (100% à 10% HR et 25°C)
-    facteur_H = np.exp(-0.022 * (hum - 10)) if hum > 10 else 1.0
-    facteur_T = np.exp(-0.025 * (temp - 25)) if temp > 25 else 1.0
+    facteur_H_o3 = np.exp(-0.025 * (hum - 10)) if hum > 10 else 1.0
+    facteur_T_o3 = np.exp(-0.030 * (temp - 25)) if temp > 25 else 1.0
     
-    o3_mg_h_reel = prod_nominale_mg_h * facteur_H * facteur_T
+    o3_mg_h_reel = prod_nominale_mg_h * facteur_H_o3 * facteur_T_o3
     
-    # Croissance OH (Conversion de la perte d'O3 par l'humidité)
-    perte_H = 1.0 - facteur_H
-    taux_conversion = 0.18 # Rendement de transformation radicalaire
-    oh_mg_h_reel = prod_nominale_mg_h * perte_H * taux_conversion * facteur_T
+    # 3. Facteurs de croissance (Hydroxyle OH)
+    # Transformation de la perte d'Ozone due à l'humidité en OH
+    perte_H = 1.0 - facteur_H_o3
+    taux_conversion_oh = 0.20 # Rendement de transformation OH estimé
+    oh_mg_h_reel = prod_nominale_mg_h * perte_H * taux_conversion_oh * facteur_T_o3
 
     # --- AFFICHAGE ---
     status_text = f"🔴 MODE RÉEL ({nb_gen} GEN)" if mode_experimental else "🔵 MODE SIMULATION"
@@ -141,26 +146,29 @@ if page == "📊 Monitoring Temps Réel":
     
     m1, m2, m3 = st.columns(3)
     m1.metric("Température", f"{temp:.1f} °C", delta=f"{temp-25:.1f}°")
-    m2.metric("Humidité", f"{hum:.1f} %")
-    m3.metric("Production Ozone", f"{o3_mg_h_reel:.0f} mg/h")
+    m2.metric("Humidité", f"{hum:.1f} %", delta="Formation OH active" if hum > 30 else "Zone O3 pure")
+    m3.metric("Puissance Active", f"{nb_gen * 85:.1f} W")
 
-    st.markdown("#### 🧪 Concentrations Estimées (PPM)")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Ozone (O3)", f"{(o3_mg_h_reel / 12.84):.2f} ppm")
-    c2.metric("Hydroxyle (·OH)", f"{(oh_mg_h_reel / 4.56):.2f} ppm")
-    c3.metric("Efficacité Globale", f"{(facteur_H * facteur_T * 100):.1f} %")
+    st.markdown("#### 🧪 Concentrations et Rendements")
+    c1, c2, c3, c4 = st.columns(4)
+    # PPM O3 (Densité ~2.14) | PPM OH (Densité ~0.76 estimée pour air)
+    c1.metric("Ozone (O3)", f"{(o3_mg_h_reel / (6.0 * 2.14)):.2f} ppm")
+    c2.metric("Hydroxyle (·OH)", f"{(oh_mg_h_reel / (6.0 * 0.76)):.2f} ppm")
+    c3.metric("Production O3", f"{o3_mg_h_reel:.0f} mg/h")
+    c4.metric("Efficacité (G)", f"{(o3_mg_h_reel/(nb_gen*85) if nb_gen>0 else 0):.2f} mg/W")
 
     st.divider()
     
-    # Graphique de conversion
+    # Graphique de conversion croisée
     h_range = np.linspace(5, 95, 100)
-    o3_plot = [prod_nominale_mg_h * (np.exp(-0.022 * (h - 10)) if h > 10 else 1.0) * facteur_T for h in h_range]
-    oh_plot = [prod_nominale_mg_h * (1.0 - (np.exp(-0.022 * (h - 10)) if h > 10 else 1.0)) * taux_conversion * facteur_T for h in h_range]
+    o3_plot = [prod_nominale_mg_h * (np.exp(-0.025 * (h - 10)) if h > 10 else 1.0) * facteur_T_o3 for h in h_range]
+    oh_plot = [prod_nominale_mg_h * (1.0 - (np.exp(-0.025 * (h - 10)) if h > 10 else 1.0)) * taux_conversion_oh * facteur_T_o3 for h in h_range]
     
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=h_range, y=o3_plot, name="Ozone (O3)", line=dict(color='cyan', width=3)))
     fig.add_trace(go.Scatter(x=h_range, y=oh_plot, name="Hydroxyle (·OH)", line=dict(color='orange', width=3)))
-    fig.update_layout(template="plotly_dark", title="Dynamique de conversion O3 vers ·OH", xaxis_title="Humidité %", yaxis_title="mg/h")
+    fig.add_vline(x=hum, line_dash="dash", line_color="white", annotation_text="Fonctionnement Actuel")
+    fig.update_layout(template="plotly_dark", title="Modélisation de la conversion radicalaire (Transformation O3 en ·OH)", xaxis_title="Humidité Relative (%)", yaxis_title="Production (mg/h)")
     st.plotly_chart(fig, use_container_width=True)
 
 # =================================================================
@@ -176,13 +184,13 @@ elif page == "🔬 Prototype & Datasheet":
     with col_img:
         st.subheader("🖼️ Vue du Prototype")
         try:
-            st.image("prototype.jpg", caption="Unité hybride de traitement par hydroxyle.", use_container_width=True)
+            st.image("prototype.jpg", caption="Unité hybride de traitement par hydroxyle - UDL-SBA.", use_container_width=True)
         except:
             st.error("⚠️ Image 'prototype.jpg' introuvable.")
     
     with col_desc:
         st.subheader("📝 Principe de fonctionnement")
-        st.info("Le système utilise l'effet Corona pour générer de l'ozone qui, en rencontrant un flux d'air saturé en humidité, se dissocie pour former des radicaux hydroxyles à haut potentiel d'oxydation.")
+        st.info("Le système utilise des générateurs NU-12V pour créer un plasma froid. L'injection de vapeur d'eau transforme l'ozone en radicaux hydroxyles (·OH), augmentant le pouvoir oxydant pour les déchets hospitaliers.")
         
         try:
             pdf_data = generer_pdf_datasheet()
@@ -193,7 +201,7 @@ elif page == "🔬 Prototype & Datasheet":
     st.divider()
     
     # =================================================================
-    # TABLEAU TECHNIQUE RÉVISÉ SELON VOS INSTRUCTIONS
+    # TABLEAU TECHNIQUE RÉVISÉ ET MÉMORISÉ
     # =================================================================
     st.subheader("📐 Architecture & Nomenclature des Composants")
 
