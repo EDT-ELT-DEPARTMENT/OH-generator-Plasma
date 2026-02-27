@@ -65,9 +65,9 @@ def generer_pdf_datasheet():
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(190, 10, txt="1. Architecture du Système", ln=True)
     pdf.set_font("Arial", size=10)
-    pdf.multi_cell(190, 8, txt="Ce prototype utilise des générateurs d'ozone industriels NU-12V (10g/h par unité). "
-                               "L'innovation réside dans la conversion de l'Ozone en radicaux Hydroxyles "
-                               "par le biais d'une humidification contrôlée en amont du réacteur DBD.")
+    pdf.multi_cell(190, 8, txt="Ce prototype utilise des générateurs d'ozone NU-12V combinés à une "
+                               "aspiration variable permettant de moduler le temps de traitement "
+                               "des gaz hospitaliers contaminés.")
     
     return pdf.output()
 
@@ -95,10 +95,8 @@ if page == "📊 Monitoring Temps Réel":
                 "📡 Choisir l'unité source :",
                 ["Wemos D1 Mini (WiFi)", "TTGO T-Internet-POE (Ethernet)"]
             )
-            
             fb_path = "/EDT_SBA/Wemos" if "Wemos" in carte_active else "/EDT_SBA/TTGO"
-            st.caption(f"Flux actif : `{fb_path}`")
-
+            
             if initialiser_firebase():
                 try:
                     ref = db.reference(fb_path)
@@ -106,70 +104,79 @@ if page == "📊 Monitoring Temps Réel":
                     if data_cloud:
                         st.session_state.last_temp = float(data_cloud.get('temperature', 25.0))
                         st.session_state.last_hum = float(data_cloud.get('humidite', 15.0))
-                        st.success(f"✅ {carte_active} en ligne")
+                        # Simulation du débit mesuré par Firebase si disponible
+                        debit_aspiration = float(data_cloud.get('debit', 6.0)) 
                 except Exception as e:
                     st.error(f"Erreur flux : {e}")
             
             temp, hum = st.session_state.last_temp, st.session_state.last_hum
-            nb_gen = st.slider("Générateurs Actifs (Relais)", 0, 3, 1)
+            nb_gen = st.slider("Générateurs Actifs", 0, 3, 1)
+            debit_aspiration = st.slider("Débit Aspirateur (m³/h)", 1.0, 15.0, 6.0)
         else:
             st.header("💻 Mode [SIMULATION]")
-            nb_gen = st.select_slider("Nombre de générateurs NU 12V (10g/h unité)", options=[0, 1, 2, 3], value=1)
-            temp = st.slider("Température du Gaz T (°C) [SIM]", 15.0, 80.0, 25.0)
-            hum = st.slider("Humidité Relative H (%) [SIM]", 5.0, 95.0, 15.0)
+            nb_gen = st.select_slider("Nombre de générateurs NU 12V", options=[0, 1, 2, 3], value=1)
+            debit_aspiration = st.slider("Débit d'aspiration variable (m³/h)", 1.0, 20.0, 6.0)
+            temp = st.slider("Température T (°C)", 15.0, 80.0, 25.0)
+            hum = st.slider("Humidité Relative H (%)", 5.0, 95.0, 50.0)
         
         st.divider()
-        st.caption("Débit d'air constant : 6 m³/h")
+        st.caption(f"Vitesse d'air estimée : {(debit_aspiration/3600)/0.007:.2f} m/s")
 
     # =================================================================
-    # MOTEUR DE CALCUL (BASÉ SUR ÉTUDES ET PRODUCTION NU-12V)
+    # MOTEUR DE CALCUL AVEC DÉBIT VARIABLE
     # =================================================================
-    # 1. Capacité brute (10g/h = 10000 mg/h par module)
+    # 1. Production brute (mg/h)
     prod_nominale_mg_h = nb_gen * 10000 
     
-    # 2. Facteurs de décroissance (Ozone)
-    # Décroissance O3 (100% à 10% HR et 25°C)
-    facteur_H_o3 = np.exp(-0.025 * (hum - 10)) if hum > 10 else 1.0
-    facteur_T_o3 = np.exp(-0.030 * (temp - 25)) if temp > 25 else 1.0
+    # 2. Facteurs environnementaux
+    f_H = np.exp(-0.025 * (hum - 10)) if hum > 10 else 1.0
+    f_T = np.exp(-0.030 * (temp - 25)) if temp > 25 else 1.0
     
-    o3_mg_h_reel = prod_nominale_mg_h * facteur_H_o3 * facteur_T_o3
-    
-    # 3. Facteurs de croissance (Hydroxyle OH)
-    # Transformation de la perte d'Ozone due à l'humidité en OH
-    perte_H = 1.0 - facteur_H_o3
-    taux_conversion_oh = 0.20 # Rendement de transformation OH estimé
-    oh_mg_h_reel = prod_nominale_mg_h * perte_H * taux_conversion_oh * facteur_T_o3
+    # 3. Masses produites (mg/h)
+    o3_mg_h = prod_nominale_mg_h * f_H * f_T
+    perte_H = 1.0 - f_H
+    taux_conv_oh = 0.20
+    oh_mg_h = prod_nominale_mg_h * perte_H * taux_conv_oh * f_T
 
-    # --- AFFICHAGE ---
-    status_text = f"🔴 MODE RÉEL ({nb_gen} GEN)" if mode_experimental else "🔵 MODE SIMULATION"
-    st.subheader(f"Statut : {status_text}")
-    
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Température", f"{temp:.1f} °C", delta=f"{temp-25:.1f}°")
-    m2.metric("Humidité", f"{hum:.1f} %", delta="Formation OH active" if hum > 30 else "Zone O3 pure")
-    m3.metric("Puissance Active", f"{nb_gen * 85:.1f} W")
+    # 4. CALCUL DES CONCENTRATIONS (PPM) - DÉPENDANT DU DÉBIT Q
+    # Formule : PPM = Production(mg/h) / (Débit(m3/h) * Densité(kg/m3))
+    # Densité O3 = 2.14 kg/m3 | Densité air (pour OH) = 1.2 kg/m3
+    o3_ppm = o3_mg_h / (debit_aspiration * 2.14) if debit_aspiration > 0 else 0
+    oh_ppm = oh_mg_h / (debit_aspiration * 1.2) if debit_aspiration > 0 else 0
 
-    st.markdown("#### 🧪 Concentrations et Rendements")
+    # 5. Temps de résidence (Volume réacteur estimé à 0.002 m3)
+    t_residence = (0.002 / (debit_aspiration / 3600)) # en secondes
+
+    # --- AFFICHAGE MÉTRIQUES ---
+    st.subheader(f"Statut : {status_text if 'status_text' in locals() else 'ACTIF'}")
+    
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Débit d'Air", f"{debit_aspiration:.1f} m³/h", delta="Variable")
+    m2.metric("Humidité", f"{hum:.1f} %")
+    m3.metric("Temps de Résidence", f"{t_residence:.3f} s")
+    m4.metric("Puissance active", f"{nb_gen * 85} W")
+
+    st.markdown("#### 🧪 Analyse de la Neutralisation")
     c1, c2, c3, c4 = st.columns(4)
-    # PPM O3 (Densité ~2.14) | PPM OH (Densité ~0.76 estimée pour air)
-    c1.metric("Ozone (O3)", f"{(o3_mg_h_reel / (6.0 * 2.14)):.2f} ppm")
-    c2.metric("Hydroxyle (·OH)", f"{(oh_mg_h_reel / (6.0 * 0.76)):.2f} ppm")
-    c3.metric("Production O3", f"{o3_mg_h_reel:.0f} mg/h")
-    c4.metric("Efficacité (G)", f"{(o3_mg_h_reel/(nb_gen*85) if nb_gen>0 else 0):.2f} mg/W")
+    c1.metric("Concentration O3", f"{o3_ppm:.2f} ppm")
+    c2.metric("Concentration ·OH", f"{oh_ppm:.2f} ppm")
+    c3.metric("Production O3", f"{o3_mg_h:.0f} mg/h")
+    c4.metric("Dose Oxydante", f"{(o3_ppm * t_residence):.2f} ppm.s")
 
     st.divider()
     
-    # Graphique de conversion croisée
-    h_range = np.linspace(5, 95, 100)
-    o3_plot = [prod_nominale_mg_h * (np.exp(-0.025 * (h - 10)) if h > 10 else 1.0) * facteur_T_o3 for h in h_range]
-    oh_plot = [prod_nominale_mg_h * (1.0 - (np.exp(-0.025 * (h - 10)) if h > 10 else 1.0)) * taux_conversion_oh * facteur_T_o3 for h in h_range]
+    # Graphique interactif : Impact du débit sur les concentrations
+    st.subheader("📈 Influence du Débit sur la Concentration")
+    q_range = np.linspace(1, 20, 100)
+    o3_q = [o3_mg_h / (q * 2.14) for q in q_range]
+    oh_q = [oh_mg_h / (q * 1.2) for q in q_range]
     
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=h_range, y=o3_plot, name="Ozone (O3)", line=dict(color='cyan', width=3)))
-    fig.add_trace(go.Scatter(x=h_range, y=oh_plot, name="Hydroxyle (·OH)", line=dict(color='orange', width=3)))
-    fig.add_vline(x=hum, line_dash="dash", line_color="white", annotation_text="Fonctionnement Actuel")
-    fig.update_layout(template="plotly_dark", title="Modélisation de la conversion radicalaire (Transformation O3 en ·OH)", xaxis_title="Humidité Relative (%)", yaxis_title="Production (mg/h)")
-    st.plotly_chart(fig, use_container_width=True)
+    fig_q = go.Figure()
+    fig_q.add_trace(go.Scatter(x=q_range, y=o3_q, name="Ozone (ppm)", line=dict(color='cyan')))
+    fig_q.add_trace(go.Scatter(x=q_range, y=oh_q, name="Hydroxyle (ppm)", line=dict(color='orange')))
+    fig_q.add_vline(x=debit_aspiration, line_dash="dot", annotation_text="Débit actuel")
+    fig_q.update_layout(template="plotly_dark", xaxis_title="Débit d'aspiration (m³/h)", yaxis_title="Concentration (ppm)")
+    st.plotly_chart(fig_q, use_container_width=True)
 
 # =================================================================
 # PAGE 2 : PROTOTYPE & DATASHEET
@@ -180,17 +187,20 @@ elif page == "🔬 Prototype & Datasheet":
     st.divider()
 
     col_img, col_desc = st.columns([1.6, 1])
-    
     with col_img:
         st.subheader("🖼️ Vue du Prototype")
         try:
-            st.image("prototype.jpg", caption="Unité hybride de traitement par hydroxyle - UDL-SBA.", use_container_width=True)
+            st.image("prototype.jpg", caption="Unité hybride avec ventilateur d'aspiration variable.", use_container_width=True)
         except:
             st.error("⚠️ Image 'prototype.jpg' introuvable.")
     
     with col_desc:
-        st.subheader("📝 Principe de fonctionnement")
-        st.info("Le système utilise des générateurs NU-12V pour créer un plasma froid. L'injection de vapeur d'eau transforme l'ozone en radicaux hydroxyles (·OH), augmentant le pouvoir oxydant pour les déchets hospitaliers.")
+        st.subheader("📝 Contrôle du Débit")
+        st.info("""
+        Le débit est piloté par un signal PWM envoyé au ventilateur d'extraction. 
+        - **Débit faible :** Maximise la concentration et le temps de traitement.
+        - **Débit élevé :** Assure un renouvellement rapide de l'air de la chambre de stockage.
+        """)
         
         try:
             pdf_data = generer_pdf_datasheet()
@@ -201,55 +211,17 @@ elif page == "🔬 Prototype & Datasheet":
     st.divider()
     
     # =================================================================
-    # TABLEAU TECHNIQUE RÉVISÉ ET MÉMORISÉ
+    # TABLEAU TECHNIQUE RÉVISÉ
     # =================================================================
     st.subheader("📐 Architecture & Nomenclature des Composants")
-
     data_tab = {
-        "Bloc/Fonction": [
-            "Filtration Électrostatique", 
-            "Ionisation Diélectrique", 
-            "Analyse de Combustion", 
-            "Analyse de Neutralisation", 
-            "Supervision & IHM"
-        ],
-        "Code (Référence)": [
-            "ESP-MOD-01", 
-            "DBD-RECT-150", 
-            "MQ-9-SENS", 
-            "MQ-135-SENS", 
-            "WEMOS-D1-R1"
-        ],
-        "Mode et plage de fonctionnement": [
-            "Continu", 
-            "15-25 kHz", 
-            "Temps Réel", 
-            "Temps Réel", 
-            "2.4 GHz (WiFi)"
-        ],
-        "Temps de traitement": [
-            "24h/24", 
-            "Cycle Traitement", 
-            "Permanent", 
-            "Permanent", 
-            "Cloud Sync"
-        ],
-        "Localisation": [
-            "Ligne 1 (Top)", 
-            "Ligne 2 (Bottom)", 
-            "Entrée Système", 
-            "Sortie Aspirateur", 
-            "Pupitre Commande"
-        ],
-        "Type de fonctionnement": [
-            "Haute Tension", 
-            "Plasma Froid", 
-            "Analogique", 
-            "Analogique", 
-            "IoT / Firebase"
-        ]
+        "Bloc/Fonction": ["Filtration Électrostatique", "Ionisation Diélectrique", "Analyse de Combustion", "Analyse de Neutralisation", "Supervision & IHM"],
+        "Code (Référence)": ["ESP-MOD-01", "DBD-RECT-150", "MQ-9-SENS", "MQ-135-SENS", "WEMOS-D1-R1"],
+        "Mode et plage de fonctionnement": ["Continu", "15-25 kHz", "Temps Réel", "Temps Réel", "2.4 GHz (WiFi)"],
+        "Temps de traitement": ["24h/24", "Cycle Traitement", "Permanent", "Permanent", "Cloud Sync"],
+        "Localisation": ["Ligne 1 (Top)", "Ligne 2 (Bottom)", "Entrée Système", "Sortie Aspirateur", "Pupitre Commande"],
+        "Type de fonctionnement": ["Haute Tension", "Plasma Froid", "Analogique", "Analogique", "IoT / Firebase"]
     }
-
     st.table(pd.DataFrame(data_tab))
 
 # =================================================================
