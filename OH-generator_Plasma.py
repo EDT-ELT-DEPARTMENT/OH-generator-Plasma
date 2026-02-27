@@ -22,7 +22,7 @@ st.sidebar.title("📂 Menu Principal")
 page = st.sidebar.radio("Navigation :", ["📊 Monitoring Temps Réel", "🔬 Prototype & Datasheet"])
 
 # Titre officiel rappelé systématiquement
-ST_TITRE_OFFICIEL = "Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA"
+ST_TITRE_OFFICIEL = "Station de supervision et commande d'une unité hybride de traitement de déchets hospitaliers par hydroxyle"
 
 # =================================================================
 # 2. FONCTIONS DE SERVICE (FIREBASE & PDF)
@@ -230,3 +230,4 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension. Système sous surveillance du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b></center>", unsafe_allow_html=True)
+
