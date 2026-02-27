@@ -211,7 +211,7 @@ elif page == "🔬 Prototype & Datasheet":
 st.subheader("📐 Architecture & Nomenclature des Composants")
 
 data_tab = {
-    "Enseignements (Fonction)": [
+    "Bloc/Foction": [
         "Filtration Électrostatique", 
         "Ionisation Diélectrique", 
         "Analyse de Combustion", 
@@ -271,4 +271,5 @@ st.table(pd.DataFrame(data_tab))
 st.warning("⚠️ Sécurité : Risque de Haute Tension. Système sous surveillance du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b></center>", unsafe_allow_html=True)
+
 
