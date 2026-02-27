@@ -6,3 +6,4 @@ segno
 firebase-admin
 pyserial
 streamlit-autorefresh
+fpdf2
