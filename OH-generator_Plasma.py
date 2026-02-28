@@ -179,7 +179,7 @@ if page == "📊 Monitoring Temps Réel":
     st.plotly_chart(fig_q, use_container_width=True)
 
 # =================================================================
-# PAGE 2 : PROTOTYPE & DATASHEET
+# 4. PAGE PROTOTYPE & DATASHEET (TABLEAU CORRIGÉ)
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Architecture & Spécifications")
@@ -225,7 +225,7 @@ elif page == "🔬 Prototype & Datasheet":
     st.divider()
     st.subheader("📐 Architecture & Nomenclature des Composants")
 
-    # Tableau technique mis à jour avec TTGO et vos capteurs réels
+    # Réintégration exacte de votre tableau technique (sans mention EDT)
     data_tab = {
         "Bloc/Fonction": [
             "Filtration Électrostatique", 
@@ -280,7 +280,7 @@ elif page == "🔬 Prototype & Datasheet":
     st.table(pd.DataFrame(data_tab))
 
 # =================================================================
-# PIED DE PAGE
+# PIED DE PAGE (RAPPEL DU TITRE OFFICIEL)
 # =================================================================
 st.warning("⚠️ Sécurité : Risque de Haute Tension. Système sous surveillance du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
