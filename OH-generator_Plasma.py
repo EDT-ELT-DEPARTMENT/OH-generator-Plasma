@@ -99,9 +99,7 @@ if page == "📊 Monitoring Temps Réel":
                 ["Wemos D1 Mini", "TTGO ESP32"]
             )
             
-            # --- CORRECTION DU CHEMIN (PATH) ---
-            # Votre Arduino envoie vers "/EDT_SBA/temperature"
-            # Donc pour la Wemos, on doit s'arrêter à "/EDT_SBA"
+            # On pointe sur /EDT_SBA car c'est là que votre Wemos écrit (T, H et NOx)
             if "Wemos" in carte_active:
                 fb_path = "/EDT_SBA"
             else:
@@ -113,10 +111,13 @@ if page == "📊 Monitoring Temps Réel":
                     data_cloud = ref.get()
                     
                     if data_cloud:
-                        # On récupère "temperature" et "humidite" (noms exacts du code Arduino)
+                        # 1. Récupération des 3 valeurs envoyées par la Wemos
                         st.session_state.temp_reelle = float(data_cloud.get('temperature', 25.0))
                         st.session_state.hum_reelle = float(data_cloud.get('humidite', 50.0))
-                        st.success(f"✅ Flux actif : {carte_active}")
+                        # AJOUT DU NOX ICI
+                        st.session_state.nox_reelle = int(data_cloud.get('nox', 0))
+                        
+                        st.success(f"✅ Flux Multi-Capteurs Actif : {carte_active}")
                     else:
                         st.warning(f"⏳ Données absentes sur : {fb_path}")
                 except Exception as e:
@@ -163,25 +164,57 @@ if page == "📊 Monitoring Temps Réel":
     st.subheader(f"Statut : {'🔴 MESURE RÉELLE' if mode_experimental else '🔵 SIMULATION'}")
     
     m1, m2, m3, m4 = st.columns(4)
-    # Affichage des valeurs réelles venant de Firebase
+    
+    # 1. Température Réelle ou Simulée
     m1.metric("🌡️ Température", f"{temp_actuelle:.1f} °C", delta="Live" if mode_experimental else None)
+    
+    # 2. Humidité Réelle ou Simulée
     m2.metric("💧 Humidité", f"{hum_actuelle:.1f} %", delta="Live" if mode_experimental else None)
-    m3.metric("🌀 Débit d'Air", f"{debit_aspiration:.1f} m³/h")
+    
+    # 3. NOx Réel ou Débit (Alternance automatique)
+    if mode_experimental:
+        val_nox = st.session_state.get('nox_reelle', 0)
+        # On définit une alerte si le NOx dépasse 600 (valeur brute)
+        alerte_nox = "⚠️ ÉLEVÉ" if val_nox > 600 else "✅ STABLE"
+        m3.metric("💨 Rejets NOx (Brut)", f"{val_nox}", delta=alerte_nox, delta_color="inverse")
+    else:
+        m3.metric("🌀 Débit d'Air", f"{debit_aspiration:.1f} m³/h")
+    
+    # 4. Temps de Résidence
     m4.metric("⏱️ T. Résidence", f"{t_residence:.3f} s")
 
+    # --- ANALYSE CHIMIQUE ---
     st.markdown("#### 🧪 Analyse Chimique des Radicaux")
     c1, c2, c3, c4 = st.columns(4)
+    
+    # Note : Les calculs de concentration utilisent maintenant vos vraies valeurs T et H !
     c1.metric("Concentration O3", f"{o3_ppm:.2f} ppm")
     c2.metric("Concentration ·OH", f"{oh_ppm:.2f} ppm", delta="Hydroxyle")
     c3.metric("Production O3", f"{(o3_ppm * debit_aspiration * 2.14):.0f} mg/h")
     c4.metric("Puissance active", f"{nb_gen * 85} W")
 
     st.divider()
-    # Graphique de performance interactif
+    
+    # --- GRAPHIQUE INTERACTIF ---
     q_range = np.linspace(1, 20, 100)
     fig_q = go.Figure()
-    fig_q.add_trace(go.Scatter(x=q_range, y=[(nb_gen*45*(1-f_H)*f_T)/q for q in q_range], name="·OH (ppm)", line=dict(color='orange')))
-    fig_q.update_layout(template="plotly_dark", title="Cinétique de l'hydroxyle en fonction du débit d'aspiration", xaxis_title="Q (m³/h)", yaxis_title="Radicaux (ppm)")
+    
+    # Courbe théorique basée sur les conditions réelles captées par la Wemos
+    y_vals = [(nb_gen * 45 * (1 - f_H) * f_T) / q for q in q_range]
+    
+    fig_q.add_trace(go.Scatter(
+        x=q_range, 
+        y=y_vals, 
+        name="·OH (ppm) Calculé", 
+        line=dict(color='orange', width=3)
+    ))
+    
+    fig_q.update_layout(
+        template="plotly_dark", 
+        title=f"Cinétique de l'hydroxyle (Basée sur T:{temp_actuelle}°C et H:{hum_actuelle}%)", 
+        xaxis_title="Q (m³/h)", 
+        yaxis_title="Radicaux (ppm)"
+    )
     st.plotly_chart(fig_q, use_container_width=True)
 
 # =================================================================
@@ -270,4 +303,5 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
+
 
