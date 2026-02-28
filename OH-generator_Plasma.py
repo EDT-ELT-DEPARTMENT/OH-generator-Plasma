@@ -98,8 +98,29 @@ if page == "📊 Monitoring Temps Réel":
                 "📡 Source de données :",
                 ["Wemos D1 Mini", "TTGO ESP32"]
             )
-            # Chemin Firebase : /EDT_SBA/WemosD1Mini ou /EDT_SBA/TTGOESP32
-            fb_path = f"/EDT_SBA/{carte_active.replace(' ', '')}"
+            
+            # --- CORRECTION DU CHEMIN (PATH) ---
+            # Votre Arduino envoie vers "/EDT_SBA/temperature"
+            # Donc pour la Wemos, on doit s'arrêter à "/EDT_SBA"
+            if "Wemos" in carte_active:
+                fb_path = "/EDT_SBA"
+            else:
+                fb_path = "/EDT_SBA/TTGOESP32"
+            
+            if initialiser_firebase():
+                try:
+                    ref = db.reference(fb_path)
+                    data_cloud = ref.get()
+                    
+                    if data_cloud:
+                        # On récupère "temperature" et "humidite" (noms exacts du code Arduino)
+                        st.session_state.temp_reelle = float(data_cloud.get('temperature', 25.0))
+                        st.session_state.hum_reelle = float(data_cloud.get('humidite', 50.0))
+                        st.success(f"✅ Flux actif : {carte_active}")
+                    else:
+                        st.warning(f"⏳ Données absentes sur : {fb_path}")
+                except Exception as e:
+                    st.error(f"❌ Erreur de réception : {e}")
             
             if initialiser_firebase():
                 try:
@@ -249,3 +270,4 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
+
