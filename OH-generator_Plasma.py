@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Rafraîchissement automatique toutes les 2 secondes
+# Rafraîchissement automatique toutes les 2 secondes pour le temps réel
 st_autorefresh(interval=2000, key="datarefresh")
 
 # Navigation par menu latéral
@@ -42,7 +42,7 @@ def initialiser_firebase():
                     fb_secrets["private_key"] = fb_secrets["private_key"].replace("\\n", "\n")
                 cred = credentials.Certificate(fb_secrets)
             else:
-                # Fallback local pour développement
+                # Fallback local pour développement (votre-cle.json)
                 cred = credentials.Certificate("votre-cle.json")
                 
             firebase_admin.initialize_app(cred, {
@@ -76,20 +76,21 @@ def generer_pdf_datasheet():
     return pdf.output()
 
 # =================================================================
-# 3. PAGE 1 : MONITORING TEMPS RÉEL (POLYVALENT)
+# 3. PAGE 1 : MONITORING TEMPS RÉEL (FLUX RÉEL FORCÉ)
 # =================================================================
 if page == "📊 Monitoring Temps Réel":
     st.title("⚡ Monitoring des Oxydants Hybrides")
     st.markdown(f"### {ST_TITRE_OFFICIEL}")
     st.info(f"📅 État du système au : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
 
-    # Initialisation des variables d'état (évite les erreurs de chargement)
-    if 'temp' not in st.session_state: st.session_state.temp = 25.0
-    if 'hum' not in st.session_state: st.session_state.hum = 45.0
+    # Initialisation des variables d'état pour le stockage des mesures réelles
+    if 'temp_reelle' not in st.session_state: st.session_state.temp_reelle = 25.0
+    if 'hum_reelle' not in st.session_state: st.session_state.hum_reelle = 50.0
 
     with st.sidebar:
         st.header("🎮 Contrôle & Réception")
-        mode_experimental = st.toggle("🚀 Activer Flux Réel (Wemos/TTGO)", value=False)
+        # Par défaut mis sur True pour forcer l'affichage réel au démarrage
+        mode_experimental = st.toggle("🚀 Activer Flux Réel (Wemos/TTGO)", value=True)
         st.divider()
         
         if mode_experimental:
@@ -97,7 +98,7 @@ if page == "📊 Monitoring Temps Réel":
                 "📡 Source de données :",
                 ["Wemos D1 Mini", "TTGO ESP32"]
             )
-            # Chemin Firebase harmonisé
+            # Chemin Firebase : /EDT_SBA/WemosD1Mini ou /EDT_SBA/TTGOESP32
             fb_path = f"/EDT_SBA/{carte_active.replace(' ', '')}"
             
             if initialiser_firebase():
@@ -105,59 +106,65 @@ if page == "📊 Monitoring Temps Réel":
                     ref = db.reference(fb_path)
                     data_cloud = ref.get()
                     if data_cloud:
-                        st.session_state.temp = float(data_cloud.get('temperature', 25.0))
-                        st.session_state.hum = float(data_cloud.get('humidite', 45.0))
-                        st.success(f"✅ Signal reçu : {carte_active}")
+                        # Recherche flexible des clés (temp ou temperature / hum ou humidite)
+                        st.session_state.temp_reelle = float(data_cloud.get('temperature', data_cloud.get('temp', 25.0)))
+                        st.session_state.hum_reelle = float(data_cloud.get('humidite', data_cloud.get('hum', 50.0)))
+                        st.success(f"✅ Données en direct de : {carte_active}")
                     else:
-                        st.warning("⏳ En attente de données...")
-                except:
-                    st.error("❌ Erreur de flux")
+                        st.warning(f"⏳ En attente sur : {fb_path}")
+                except Exception as e:
+                    st.error(f"❌ Erreur de réception : {e}")
             
             nb_gen = st.slider("Générateurs Actifs", 0, 3, 1)
             debit_aspiration = st.slider("Débit Aspirateur (m³/h)", 1.0, 15.0, 6.0)
         else:
             st.header("💻 Mode Simulation")
-            st.session_state.temp = st.slider("Température T (°C)", 15.0, 80.0, 25.0)
-            st.session_state.hum = st.slider("Humidité Relative H (%)", 5.0, 95.0, 50.0)
+            st.session_state.temp_reelle = st.slider("Température T (°C)", 15.0, 80.0, 25.0)
+            st.session_state.hum_reelle = st.slider("Humidité Relative H (%)", 5.0, 95.0, 50.0)
             debit_aspiration = st.slider("Débit d'aspiration (m³/h)", 1.0, 20.0, 5.0)
             nb_gen = 1
 
+    # --- RÉCUPÉRATION DES VALEURS POUR LE CALCUL ---
+    temp_actuelle = st.session_state.temp_reelle
+    hum_actuelle = st.session_state.hum_reelle
+
     # --- MOTEUR DE CALCULS PHYSIQUES ---
     # Facteurs de correction environnementaux
-    f_H = np.exp(-0.025 * (st.session_state.hum - 10)) if st.session_state.hum > 10 else 1.0
-    f_T = np.exp(-0.030 * (st.session_state.temp - 25)) if st.session_state.temp > 25 else 1.0
+    f_H = np.exp(-0.025 * (hum_actuelle - 10)) if hum_actuelle > 10 else 1.0
+    f_T = np.exp(-0.030 * (temp_actuelle - 25)) if temp_actuelle > 25 else 1.0
     
     # Calcul des concentrations (PPM)
     o3_ppm = (nb_gen * 120 * f_H * f_T) / debit_aspiration if debit_aspiration > 0 else 0
     oh_ppm = (nb_gen * 45 * (1 - f_H) * f_T) / debit_aspiration if debit_aspiration > 0 else 0
     t_residence = (0.002 / (debit_aspiration / 3600)) if debit_aspiration > 0 else 0
 
-    # --- AFFICHAGE MÉTRIQUES PRINCIPALES ---
-    st.subheader(f"Statut : {'🔴 MESURE EN DIRECT' if mode_experimental else '🔵 SIMULATION'}")
+    # --- AFFICHAGE MÉTRIQUES PRINCIPALES (SANS CONDENSATION) ---
+    st.subheader(f"Statut : {'🔴 MESURE RÉELLE' if mode_experimental else '🔵 SIMULATION'}")
     
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("🌡️ Température", f"{st.session_state.temp:.1f} °C")
-    m2.metric("💧 Humidité", f"{st.session_state.hum:.1f} %")
+    # Affichage des valeurs réelles venant de Firebase
+    m1.metric("🌡️ Température", f"{temp_actuelle:.1f} °C", delta="Live" if mode_experimental else None)
+    m2.metric("💧 Humidité", f"{hum_actuelle:.1f} %", delta="Live" if mode_experimental else None)
     m3.metric("🌀 Débit d'Air", f"{debit_aspiration:.1f} m³/h")
     m4.metric("⏱️ T. Résidence", f"{t_residence:.3f} s")
 
     st.markdown("#### 🧪 Analyse Chimique des Radicaux")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Concentration O3", f"{o3_ppm:.2f} ppm")
-    c2.metric("Concentration ·OH", f"{oh_ppm:.2f} ppm", delta="Radicaux")
+    c2.metric("Concentration ·OH", f"{oh_ppm:.2f} ppm", delta="Hydroxyle")
     c3.metric("Production O3", f"{(o3_ppm * debit_aspiration * 2.14):.0f} mg/h")
     c4.metric("Puissance active", f"{nb_gen * 85} W")
 
     st.divider()
-    # Graphique de performance
+    # Graphique de performance interactif
     q_range = np.linspace(1, 20, 100)
     fig_q = go.Figure()
     fig_q.add_trace(go.Scatter(x=q_range, y=[(nb_gen*45*(1-f_H)*f_T)/q for q in q_range], name="·OH (ppm)", line=dict(color='orange')))
-    fig_q.update_layout(template="plotly_dark", title="Cinétique de l'hydroxyle en fonction du débit", xaxis_title="Q (m³/h)")
+    fig_q.update_layout(template="plotly_dark", title="Cinétique de l'hydroxyle en fonction du débit d'aspiration", xaxis_title="Q (m³/h)", yaxis_title="Radicaux (ppm)")
     st.plotly_chart(fig_q, use_container_width=True)
 
 # =================================================================
-# 4. PAGE 2 : PROTOTYPE & DATASHEET (TABLEAU EXACT)
+# 4. PAGE 2 : PROTOTYPE & DATASHEET (TABLEAU TECHNIQUE COMPLET)
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Architecture & Spécifications")
@@ -173,17 +180,17 @@ elif page == "🔬 Prototype & Datasheet":
             st.error("⚠️ Image 'prototype.jpg' non trouvée.")
 
     with col_desc:
-        st.subheader("📝 Documentation")
-        st.success("**Principe :** L'air saturé en humidité traverse le réacteur DBD pour générer des radicaux hydroxyles hautement réactifs.")
+        st.subheader("📝 Documentation Technique")
+        st.success("**Principe de fonctionnement :** L'air saturé en humidité traverse le réacteur DBD (Dielectric Barrier Discharge) pour générer des radicaux hydroxyles par dissociation moléculaire.")
         try:
             pdf_data = generer_pdf_datasheet()
-            st.download_button("📥 Télécharger le PDF", pdf_data, "Fiche_Technique_SBA.pdf", "application/pdf")
+            st.download_button("📥 Télécharger la Datasheet (PDF)", pdf_data, "Fiche_Technique_SBA.pdf", "application/pdf")
         except: pass
 
     st.divider()
     st.subheader("📐 Architecture & Nomenclature des Composants")
 
-    # Votre tableau exact corrigé sans condensation
+    # Votre tableau exact corrigé et complet (selon votre disposition)
     data_tab = {
         "Bloc/Fonction": [
             "Filtration Électrostatique", 
@@ -237,7 +244,7 @@ elif page == "🔬 Prototype & Datasheet":
     st.table(pd.DataFrame(data_tab))
 
 # =================================================================
-# PIED DE PAGE
+# 5. PIED DE PAGE (RAPPEL DES RÉFÉRENCES)
 # =================================================================
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
