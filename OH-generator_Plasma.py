@@ -6,30 +6,34 @@ from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, db
 from streamlit_autorefresh import st_autorefresh
-from fpdf import FPDF  # Nécessite pip install fpdf2
+from fpdf import FPDF
 
 # =================================================================
-# 1. CONFIGURATION DE LA PAGE
+# 1. CONFIGURATION DE LA PAGE & TITRES OFFICIELS
 # =================================================================
+# Titre mémorisé selon vos instructions
+ST_TITRE_OFFICIEL = "Station de supervision et commande d'une unité hybride de traitement de déchets hospitaliers par hydroxyle"
+ADMIN_REF = "Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA"
+
 st.set_page_config(
-    page_title="Station de supervision et commande d'une unité hybride de traitement de déchets hospitaliers par hydroxyle",
+    page_title=ST_TITRE_OFFICIEL,
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Rafraîchissement automatique toutes les 2 secondes
+st_autorefresh(interval=2000, key="datarefresh")
+
 # Navigation par menu latéral
 st.sidebar.title("📂 Menu Principal")
 page = st.sidebar.radio("Navigation :", ["📊 Monitoring Temps Réel", "🔬 Prototype & Datasheet"])
-
-# Titre officiel rappelé systématiquement
-ST_TITRE_OFFICIEL = "Station de supervision et commande d'une unité hybride de traitement de déchets hospitaliers par hydroxyle"
 
 # =================================================================
 # 2. FONCTIONS DE SERVICE (FIREBASE & PDF)
 # =================================================================
 @st.cache_resource
 def initialiser_firebase():
-    """Initialise la connexion Firebase"""
+    """Initialise la connexion Firebase de manière sécurisée"""
     try:
         if not firebase_admin._apps:
             if "firebase" in st.secrets:
@@ -38,7 +42,7 @@ def initialiser_firebase():
                     fb_secrets["private_key"] = fb_secrets["private_key"].replace("\\n", "\n")
                 cred = credentials.Certificate(fb_secrets)
             else:
-                # Utiliser le fichier JSON local si non sur Streamlit Cloud
+                # Fallback local pour développement
                 cred = credentials.Certificate("votre-cle.json")
                 
             firebase_admin.initialize_app(cred, {
@@ -46,11 +50,11 @@ def initialiser_firebase():
             })
         return True
     except Exception as e:
-        st.sidebar.error(f"Erreur Firebase : {e}")
+        st.sidebar.error(f"Erreur de liaison Cloud : {e}")
         return False
 
 def generer_pdf_datasheet():
-    """Génère un export PDF de la fiche technique"""
+    """Génère l'export PDF de la fiche technique"""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
@@ -59,127 +63,101 @@ def generer_pdf_datasheet():
     
     pdf.set_font("Arial", size=11)
     pdf.cell(190, 10, txt=f"Projet : {ST_TITRE_OFFICIEL}", ln=True)
+    pdf.cell(190, 10, txt=f"Référence : {ADMIN_REF}", ln=True)
     pdf.cell(190, 10, txt=f"Date de génération : {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True)
     
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(190, 10, txt="1. Architecture du Système", ln=True)
     pdf.set_font("Arial", size=10)
-    pdf.multi_cell(190, 8, txt="Ce prototype utilise des générateurs d'ozone NU-12V combinés à une "
-                               "aspiration variable permettant de moduler le temps de traitement "
-                               "des gaz hospitaliers contaminés.")
-    
+    pdf.multi_cell(190, 8, txt="Ce prototype utilise des générateurs d'ozone et un réacteur DBD "
+                               "pour la production de radicaux hydroxyles destinés à la "
+                               "neutralisation des agents pathogènes hospitaliers.")
     return pdf.output()
 
 # =================================================================
-# PAGE 1 : MONITORING TEMPS RÉEL
+# 3. PAGE 1 : MONITORING TEMPS RÉEL (POLYVALENT)
 # =================================================================
 if page == "📊 Monitoring Temps Réel":
-    st_autorefresh(interval=2000, key="datarefresh")
-    
     st.title("⚡ Monitoring des Oxydants Hybrides")
     st.markdown(f"### {ST_TITRE_OFFICIEL}")
-    st.info(f"📅 Date du jour : {datetime.now().strftime('%d/%m/%Y')}")
+    st.info(f"📅 État du système au : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
 
-    if 'last_temp' not in st.session_state: st.session_state.last_temp = 25.0
-    if 'last_hum' not in st.session_state: st.session_state.last_hum = 15.0
+    # Initialisation des variables d'état (évite les erreurs de chargement)
+    if 'temp' not in st.session_state: st.session_state.temp = 25.0
+    if 'hum' not in st.session_state: st.session_state.hum = 45.0
 
     with st.sidebar:
-        st.header("🎮 Contrôle du Système")
-        mode_experimental = st.toggle("🚀 Activer Mode Expérimental", value=False)
+        st.header("🎮 Contrôle & Réception")
+        mode_experimental = st.toggle("🚀 Activer Flux Réel (Wemos/TTGO)", value=False)
         st.divider()
         
         if mode_experimental:
-            st.header("🔌 Réception [MESURÉE]")
             carte_active = st.selectbox(
-                "📡 Choisir l'unité source :",
-                ["Wemos D1 Mini (WiFi)", "TTGO T-Internet-POE (Ethernet)"]
+                "📡 Source de données :",
+                ["Wemos D1 Mini", "TTGO ESP32"]
             )
-            fb_path = "/EDT_SBA/Wemos" if "Wemos" in carte_active else "/EDT_SBA/TTGO"
+            # Chemin Firebase harmonisé
+            fb_path = f"/EDT_SBA/{carte_active.replace(' ', '')}"
             
             if initialiser_firebase():
                 try:
                     ref = db.reference(fb_path)
                     data_cloud = ref.get()
                     if data_cloud:
-                        st.session_state.last_temp = float(data_cloud.get('temperature', 25.0))
-                        st.session_state.last_hum = float(data_cloud.get('humidite', 15.0))
-                        # Simulation du débit mesuré par Firebase si disponible
-                        debit_aspiration = float(data_cloud.get('debit', 6.0)) 
-                except Exception as e:
-                    st.error(f"Erreur flux : {e}")
+                        st.session_state.temp = float(data_cloud.get('temperature', 25.0))
+                        st.session_state.hum = float(data_cloud.get('humidite', 45.0))
+                        st.success(f"✅ Signal reçu : {carte_active}")
+                    else:
+                        st.warning("⏳ En attente de données...")
+                except:
+                    st.error("❌ Erreur de flux")
             
-            temp, hum = st.session_state.last_temp, st.session_state.last_hum
             nb_gen = st.slider("Générateurs Actifs", 0, 3, 1)
             debit_aspiration = st.slider("Débit Aspirateur (m³/h)", 1.0, 15.0, 6.0)
         else:
-            st.header("💻 Mode [SIMULATION]")
-            nb_gen = st.select_slider("Nombre de générateurs NU 12V", options=[0, 1, 2, 3], value=1)
-            debit_aspiration = st.slider("Débit d'aspiration variable (m³/h)", 1.0, 20.0, 6.0)
-            temp = st.slider("Température T (°C)", 15.0, 80.0, 25.0)
-            hum = st.slider("Humidité Relative H (%)", 5.0, 95.0, 50.0)
-        
-        st.divider()
-        st.caption(f"Vitesse d'air estimée : {(debit_aspiration/3600)/0.007:.2f} m/s")
+            st.header("💻 Mode Simulation")
+            st.session_state.temp = st.slider("Température T (°C)", 15.0, 80.0, 25.0)
+            st.session_state.hum = st.slider("Humidité Relative H (%)", 5.0, 95.0, 50.0)
+            debit_aspiration = st.slider("Débit d'aspiration (m³/h)", 1.0, 20.0, 5.0)
+            nb_gen = 1
 
-    # =================================================================
-    # MOTEUR DE CALCUL AVEC DÉBIT VARIABLE
-    # =================================================================
-    # 1. Production brute (mg/h)
-    prod_nominale_mg_h = nb_gen * 10000 
+    # --- MOTEUR DE CALCULS PHYSIQUES ---
+    # Facteurs de correction environnementaux
+    f_H = np.exp(-0.025 * (st.session_state.hum - 10)) if st.session_state.hum > 10 else 1.0
+    f_T = np.exp(-0.030 * (st.session_state.temp - 25)) if st.session_state.temp > 25 else 1.0
     
-    # 2. Facteurs environnementaux
-    f_H = np.exp(-0.025 * (hum - 10)) if hum > 10 else 1.0
-    f_T = np.exp(-0.030 * (temp - 25)) if temp > 25 else 1.0
-    
-    # 3. Masses produites (mg/h)
-    o3_mg_h = prod_nominale_mg_h * f_H * f_T
-    perte_H = 1.0 - f_H
-    taux_conv_oh = 0.20
-    oh_mg_h = prod_nominale_mg_h * perte_H * taux_conv_oh * f_T
+    # Calcul des concentrations (PPM)
+    o3_ppm = (nb_gen * 120 * f_H * f_T) / debit_aspiration if debit_aspiration > 0 else 0
+    oh_ppm = (nb_gen * 45 * (1 - f_H) * f_T) / debit_aspiration if debit_aspiration > 0 else 0
+    t_residence = (0.002 / (debit_aspiration / 3600)) if debit_aspiration > 0 else 0
 
-    # 4. CALCUL DES CONCENTRATIONS (PPM) - DÉPENDANT DU DÉBIT Q
-    # Formule : PPM = Production(mg/h) / (Débit(m3/h) * Densité(kg/m3))
-    # Densité O3 = 2.14 kg/m3 | Densité air (pour OH) = 1.2 kg/m3
-    o3_ppm = o3_mg_h / (debit_aspiration * 2.14) if debit_aspiration > 0 else 0
-    oh_ppm = oh_mg_h / (debit_aspiration * 1.2) if debit_aspiration > 0 else 0
-
-    # 5. Temps de résidence (Volume réacteur estimé à 0.002 m3)
-    t_residence = (0.002 / (debit_aspiration / 3600)) # en secondes
-
-    # --- AFFICHAGE MÉTRIQUES ---
-    st.subheader(f"Statut : {status_text if 'status_text' in locals() else 'ACTIF'}")
+    # --- AFFICHAGE MÉTRIQUES PRINCIPALES ---
+    st.subheader(f"Statut : {'🔴 MESURE EN DIRECT' if mode_experimental else '🔵 SIMULATION'}")
     
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Débit d'Air", f"{debit_aspiration:.1f} m³/h", delta="Variable")
-    m2.metric("Humidité", f"{hum:.1f} %")
-    m3.metric("Temps de Résidence", f"{t_residence:.3f} s")
-    m4.metric("Puissance active", f"{nb_gen * 85} W")
+    m1.metric("🌡️ Température", f"{st.session_state.temp:.1f} °C")
+    m2.metric("💧 Humidité", f"{st.session_state.hum:.1f} %")
+    m3.metric("🌀 Débit d'Air", f"{debit_aspiration:.1f} m³/h")
+    m4.metric("⏱️ T. Résidence", f"{t_residence:.3f} s")
 
-    st.markdown("#### 🧪 Analyse de la Neutralisation")
+    st.markdown("#### 🧪 Analyse Chimique des Radicaux")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Concentration O3", f"{o3_ppm:.2f} ppm")
-    c2.metric("Concentration ·OH", f"{oh_ppm:.2f} ppm")
-    c3.metric("Production O3", f"{o3_mg_h:.0f} mg/h")
-    c4.metric("Dose Oxydante", f"{(o3_ppm * t_residence):.2f} ppm.s")
+    c2.metric("Concentration ·OH", f"{oh_ppm:.2f} ppm", delta="Radicaux")
+    c3.metric("Production O3", f"{(o3_ppm * debit_aspiration * 2.14):.0f} mg/h")
+    c4.metric("Puissance active", f"{nb_gen * 85} W")
 
     st.divider()
-    
-    # Graphique interactif : Impact du débit sur les concentrations
-    st.subheader("📈 Influence du Débit sur la Concentration")
+    # Graphique de performance
     q_range = np.linspace(1, 20, 100)
-    o3_q = [o3_mg_h / (q * 2.14) for q in q_range]
-    oh_q = [oh_mg_h / (q * 1.2) for q in q_range]
-    
     fig_q = go.Figure()
-    fig_q.add_trace(go.Scatter(x=q_range, y=o3_q, name="Ozone (ppm)", line=dict(color='cyan')))
-    fig_q.add_trace(go.Scatter(x=q_range, y=oh_q, name="Hydroxyle (ppm)", line=dict(color='orange')))
-    fig_q.add_vline(x=debit_aspiration, line_dash="dot", annotation_text="Débit actuel")
-    fig_q.update_layout(template="plotly_dark", xaxis_title="Débit d'aspiration (m³/h)", yaxis_title="Concentration (ppm)")
+    fig_q.add_trace(go.Scatter(x=q_range, y=[(nb_gen*45*(1-f_H)*f_T)/q for q in q_range], name="·OH (ppm)", line=dict(color='orange')))
+    fig_q.update_layout(template="plotly_dark", title="Cinétique de l'hydroxyle en fonction du débit", xaxis_title="Q (m³/h)")
     st.plotly_chart(fig_q, use_container_width=True)
 
 # =================================================================
-# 4. PAGE PROTOTYPE & DATASHEET (TABLEAU CORRIGÉ)
+# 4. PAGE 2 : PROTOTYPE & DATASHEET (TABLEAU EXACT)
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Architecture & Spécifications")
@@ -187,45 +165,25 @@ elif page == "🔬 Prototype & Datasheet":
     st.divider()
 
     col_img, col_desc = st.columns([1.6, 1])
-    
     with col_img:
-        st.subheader("🖼️ Vue du Prototype (Design Corrigé)")
+        st.subheader("🖼️ Vue du Prototype")
         try:
-            st.image("prototype.jpg", caption="Système Hybride : Ligne 2 optimisée avec sortie haute.", use_container_width=True)
+            st.image("prototype.jpg", caption="Unité Hybride : Ligne 1 (Filtration) & Ligne 2 (Hydroxyle).", use_container_width=True)
         except:
-            st.error("⚠️ Image 'prototype.jpg' introuvable.")
-    
+            st.error("⚠️ Image 'prototype.jpg' non trouvée.")
+
     with col_desc:
-        st.subheader("📝 Principe & Datasheet")
-        st.success("""
-        **Fonctionnement :**
-        L'air injecté en Ligne 2 est humidifié par un brumisateur ultrasonique. 
-        Le flux saturé sort par le haut pour alimenter directement le réacteur DBD 
-        où l'énergie du plasma froid dissocie les molécules d'eau en radicaux hydroxyles.
-        """)
-        
-        st.info("""
-        **Configuration Capteurs :**
-        * **MQ-9 :** Surveillance du CO avec compensation thermique logicielle.
-        * **DHT22 :** Acquisition de la température et de l'humidité relative.
-        * **MQ-135 :** Analyse de la qualité d'air et détection des NOx.
-        """)
-        
+        st.subheader("📝 Documentation")
+        st.success("**Principe :** L'air saturé en humidité traverse le réacteur DBD pour générer des radicaux hydroxyles hautement réactifs.")
         try:
             pdf_data = generer_pdf_datasheet()
-            st.download_button(
-                label="📥 Télécharger la Datasheet (PDF)",
-                data=pdf_data,
-                file_name="Datasheet_Hybride_SBA_2026.pdf",
-                mime="application/pdf"
-            )
-        except Exception as e:
-            st.error(f"Erreur PDF : {e}")
+            st.download_button("📥 Télécharger le PDF", pdf_data, "Fiche_Technique_SBA.pdf", "application/pdf")
+        except: pass
 
     st.divider()
     st.subheader("📐 Architecture & Nomenclature des Composants")
 
-    # Réintégration exacte de votre tableau technique (sans mention EDT)
+    # Votre tableau exact corrigé sans condensation
     data_tab = {
         "Bloc/Fonction": [
             "Filtration Électrostatique", 
@@ -276,12 +234,11 @@ elif page == "🔬 Prototype & Datasheet":
             "IoT / Firebase"
         ]
     }
-
     st.table(pd.DataFrame(data_tab))
 
 # =================================================================
-# PIED DE PAGE (RAPPEL DU TITRE OFFICIEL)
+# PIED DE PAGE
 # =================================================================
-st.warning("⚠️ Sécurité : Risque de Haute Tension. Système sous surveillance du Département d'Électrotechnique.")
+st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b></center>", unsafe_allow_html=True)
+st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
