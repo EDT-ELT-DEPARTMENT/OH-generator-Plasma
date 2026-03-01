@@ -99,7 +99,7 @@ if page == "📊 Monitoring Temps Réel":
                 ["Wemos D1 Mini", "TTGO ESP32"]
             )
             
-            # On pointe sur /EDT_SBA car c'est là que votre Wemos écrit (T, H et NOx)
+            # On pointe sur /EDT_SBA
             if "Wemos" in carte_active:
                 fb_path = "/EDT_SBA"
             else:
@@ -111,11 +111,24 @@ if page == "📊 Monitoring Temps Réel":
                     data_cloud = ref.get()
                     
                     if data_cloud:
-                        # 1. Récupération des 3 valeurs envoyées par la Wemos
+                        # 1. Récupération T et H
                         st.session_state.temp_reelle = float(data_cloud.get('temperature', 25.0))
                         st.session_state.hum_reelle = float(data_cloud.get('humidite', 50.0))
-                        # AJOUT DU NOX ICI
-                        st.session_state.nox_reelle = int(data_cloud.get('nox', 0))
+                        
+                        # 2. Récupération et conversion du NOx en PPM
+                        val_brute = int(data_cloud.get('nox', 0))
+                        
+                        # --- FORMULE DE CONVERSION (DÉPARTEMENT ÉLECTROTECHNIQUE) ---
+                        # On transforme le signal 0-1023 en PPM (estimation NOx)
+                        if val_brute > 0:
+                            # Calcul basé sur la résistance relative du capteur
+                            # Plus val_brute est haut, plus le PPM est élevé
+                            ratio = (1023.0 / val_brute) - 1.0
+                            # Formule simplifiée pour le MQ-135 (NOx) :
+                            ppm_calc = 116.6 * pow(ratio, -2.76) 
+                            st.session_state.nox_reelle = round(ppm_calc, 2)
+                        else:
+                            st.session_state.nox_reelle = 0.0
                         
                         st.success(f"✅ Flux Multi-Capteurs Actif : {carte_active}")
                     else:
@@ -171,13 +184,30 @@ if page == "📊 Monitoring Temps Réel":
     # 2. Humidité Réelle ou Simulée
     m2.metric("💧 Humidité", f"{hum_actuelle:.1f} %", delta="Live" if mode_experimental else None)
     
-    # 3. NOx Réel ou Débit (Alternance automatique)
+    # 3. NOx Réel (PPM) ou Débit (Alternance automatique)
     if mode_experimental:
-        val_nox = st.session_state.get('nox_reelle', 0)
-        # On définit une alerte si le NOx dépasse 600 (valeur brute)
-        alerte_nox = "⚠️ ÉLEVÉ" if val_nox > 600 else "✅ STABLE"
-        m3.metric("💨 Rejets NOx (Brut)", f"{val_nox}", delta=alerte_nox, delta_color="inverse")
+        # On récupère la valeur convertie en PPM (depuis le bloc précédent)
+        val_nox_ppm = st.session_state.get('nox_reelle', 0.0)
+        
+        # --- LOGIQUE D'ALERTE SELON LES NORMES ---
+        if val_nox_ppm > 100:
+            alerte_label = "🚨 DANGER"
+            couleur_sens = "inverse"  # Rouge (car inverse de 'normal')
+        elif val_nox_ppm > 50:
+            alerte_label = "⚠️ ALERTE"
+            couleur_sens = "off"      # Gris/Orange
+        else:
+            alerte_label = "✅ NORMAL"
+            couleur_sens = "normal"   # Vert
+            
+        m3.metric(
+            label="🧪 Concentration NOx", 
+            value=f"{val_nox_ppm} ppm", 
+            delta=alerte_label, 
+            delta_color=couleur_sens
+        )
     else:
+        # En mode simulation, on garde l'affichage du débit d'aspiration
         m3.metric("🌀 Débit d'Air", f"{debit_aspiration:.1f} m³/h")
     
     # 4. Temps de Résidence
@@ -303,5 +333,6 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
+
 
 
