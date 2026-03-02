@@ -11,7 +11,7 @@ from fpdf import FPDF
 # =================================================================
 # 1. CONFIGURATION DE LA PAGE & TITRES OFFICIELS
 # =================================================================
-ST_TITRE_OFFICIEL = "Station de supervision et commande d'une unité hybride de traitement de déchets hospitaliers par hydroxyle"
+ST_TITRE_OFFICIEL = "Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA"
 ADMIN_REF = "Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA"
 
 st.set_page_config(
@@ -135,6 +135,9 @@ if page == "📊 Monitoring Temps Réel":
     hum_actuelle = st.session_state.hum_reelle
     f_H = np.exp(-0.025 * (hum_actuelle - 10)) if hum_actuelle > 10 else 1.0
     f_T = np.exp(-0.030 * (temp_actuelle - 25)) if temp_actuelle > 25 else 1.0
+    
+    # Calcul des concentrations O3 et OH
+    o3_ppm = (nb_gen * 120 * f_H * f_T) / debit_aspiration if debit_aspiration > 0 else 0
     oh_ppm = (nb_gen * 45 * (1 - f_H) * f_T) / debit_aspiration if debit_aspiration > 0 else 0
 
     # Affichage Métriques
@@ -146,24 +149,24 @@ if page == "📊 Monitoring Temps Réel":
     m3.metric("🧪 Monoxyde CO", f"{st.session_state.co_reelle:.1f} ppm")
     m4.metric("🔋 Hydrogène H2", f"{st.session_state.h2_reelle:.1f} ppm")
 
-    st.markdown("#### 🧪 Analyse Chimique des Radicaux")
+    st.markdown("#### 🧪 Analyse Chimique des Oxydants & Radicaux")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Concentration ·OH", f"{oh_ppm:.2f} ppm", delta="Hydroxyle")
-    c2.metric("Débit d'Air", f"{debit_aspiration:.1f} m³/h")
-    c3.metric("Puissance active", f"{nb_gen * 85} W")
-    c4.metric("Niveau NOx", f"{st.session_state.nox_reelle} ppm")
+    c1.metric("🌀 Ozone (O3)", f"{o3_ppm:.2f} ppm", delta="Précurseur")
+    c2.metric("✨ Hydroxyle (·OH)", f"{oh_ppm:.2f} ppm", delta="Radicalaire")
+    c3.metric("💨 Débit d'Air", f"{debit_aspiration:.1f} m³/h")
+    c4.metric("⚠️ Niveau NOx", f"{st.session_state.nox_reelle} ppm")
 
     st.divider()
     
     # Graphique interactif
     q_range = np.linspace(1, 20, 100)
-    y_vals = [(nb_gen * 45 * (1 - f_H) * f_T) / q for q in q_range]
-    fig_q = go.Figure(go.Scatter(x=q_range, y=y_vals, name="·OH (ppm)", line=dict(color='orange', width=3)))
+    y_vals_oh = [(nb_gen * 45 * (1 - f_H) * f_T) / q for q in q_range]
+    fig_q = go.Figure(go.Scatter(x=q_range, y=y_vals_oh, name="·OH (ppm)", line=dict(color='orange', width=3)))
     fig_q.update_layout(template="plotly_dark", title="Cinétique de l'hydroxyle", xaxis_title="Q (m³/h)", yaxis_title="Radicaux (ppm)")
     st.plotly_chart(fig_q, use_container_width=True)
 
 # =================================================================
-# 4. PAGE 2 : PROTOTYPE & DATASHEET (VERSION INTEGRALE DEMANDÉE)
+# 4. PAGE 2 : PROTOTYPE & DATASHEET
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Architecture & Spécifications")
