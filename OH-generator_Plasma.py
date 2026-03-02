@@ -11,7 +11,7 @@ from fpdf import FPDF
 # =================================================================
 # 1. CONFIGURATION DE LA PAGE & TITRES OFFICIELS
 # =================================================================
-ST_TITRE_OFFICIEL = "Plateforme de monitoring à distance de traitemet de dechets hospitaliers DASRI-EPH de Sidi Bel Abbès""
+ST_TITRE_OFFICIEL = "Plateforme de monitoring à distance de traitemet de dechets hospitaliers DASRI-EPH de Sidi Bel Abbès"
 ADMIN_REF = "Plateforme de monitoring à distance de traitemet de dechets hospitaliers DASRI-EPH de Sidi Bel Abbès"
 
 st.set_page_config(
@@ -294,6 +294,7 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
+
 
 
 
