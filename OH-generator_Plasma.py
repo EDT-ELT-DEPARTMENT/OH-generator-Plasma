@@ -159,53 +159,56 @@ if page == "📊 Monitoring Temps Réel":
     st.divider()
     
     # =================================================================
-    # MISE À JOUR DU GRAPHIQUE INTERACTIF (·OH, O3, NOx)
+    # 3.4 GRAPHIQUE DE CINÉTIQUE & TABLEAU D'EFFICACITÉ (UDL-SBA)
     # =================================================================
     q_range = np.linspace(1, 20, 100)
     
-    # Calcul des courbes en fonction du débit Q
+    # Calcul des courbes (Potentiel vs Résiduel)
     y_vals_oh = [(nb_gen * 45 * (1 - f_H) * f_T) / q for q in q_range]
     y_vals_o3 = [(nb_gen * 120 * f_H * f_T) / q for q in q_range]
     
-    # Pour le NOx, on affiche une tendance basée sur la mesure réelle actuelle
-    # ajustée par le débit (dilution)
-    nox_base = st.session_state.nox_reelle if st.session_state.nox_reelle > 0 else 50.0
-    y_vals_nox = [(nox_base * 6.0) / q for q in q_range] # 6.0 est le débit de référence
+    # Modélisation du NOx résiduel (plus Q est faible, plus le traitement est efficace)
+    nox_actuel = st.session_state.nox_reelle if st.session_state.nox_reelle > 0 else 50.0
+    y_vals_nox_residuel = [nox_actuel * (1 - (0.8 / (1 + 0.2 * q))) for q in q_range]
 
-    # Création de la figure Plotly
+    # Affichage du graphique
     fig_q = go.Figure()
-
-    # Ajout de la courbe Hydroxyle
-    fig_q.add_trace(go.Scatter(
-        x=q_range, y=y_vals_oh, 
-        name="·OH (Radicaux)", 
-        line=dict(color='orange', width=3)
-    ))
-
-    # Ajout de la courbe Ozone
-    fig_q.add_trace(go.Scatter(
-        x=q_range, y=y_vals_o3, 
-        name="O3 (Ozone)", 
-        line=dict(color='cyan', width=2, dash='dash')
-    ))
-
-    # Ajout de la courbe NOx
-    fig_q.add_trace(go.Scatter(
-        x=q_range, y=y_vals_nox, 
-        name="NOx (Rejets)", 
-        line=dict(color='red', width=2, dash='dot')
-    ))
+    fig_q.add_trace(go.Scatter(x=q_range, y=y_vals_oh, name="Potentiel ·OH", line=dict(color='orange', width=3)))
+    fig_q.add_trace(go.Scatter(x=q_range, y=y_vals_o3, name="Potentiel O3", line=dict(color='cyan', width=2, dash='dash')))
+    fig_q.add_trace(go.Scatter(x=q_range, y=y_vals_nox_residuel, name="NOx Résiduel (Sortie)", line=dict(color='red', width=3)))
 
     fig_q.update_layout(
         template="plotly_dark", 
-        title="Cinétique comparée : ·OH vs O3 vs NOx", 
-        xaxis_title="Débit d'air Q (m³/h)", 
+        title="Cinétique de Neutralisation : Corrélation Oxydants / NOx", 
+        xaxis_title="Débit Q (m³/h)", 
         yaxis_title="Concentration (ppm)",
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
     )
-
     st.plotly_chart(fig_q, use_container_width=True)
 
+    # --- TABLEAU D'EFFICACITÉ DYNAMIQUE ---
+    st.subheader("📊 Rapport d'Efficacité du Traitement")
+    
+    # Calcul de l'efficacité pour le débit actuel sélectionné dans le slider
+    # L'efficacité est inversement proportionnelle au débit (temps de séjour)
+    efficacite_actuelle = (0.8 / (1 + 0.2 * debit_aspiration)) * 100
+    temps_sejour = 3.6 / debit_aspiration if debit_aspiration > 0 else 0 # Estimation simplifiée en sec
+
+    col_stats1, col_stats2, col_stats3 = st.columns(3)
+    
+    with col_stats1:
+        st.metric("🎯 Efficacité Globale", f"{efficacite_actuelle:.1f} %", 
+                  delta=f"{'Optimale' if efficacite_actuelle > 70 else 'Sous-critique'}")
+    
+    with col_stats2:
+        st.metric("⏳ Temps de Séjour estimé", f"{temps_sejour:.2f} s")
+        
+    with col_stats3:
+        taux_reduction = nox_actuel * (efficacite_actuelle / 100)
+        st.metric("📉 NOx Neutralisés", f"{taux_reduction:.1f} ppm")
+
+    st.info(f"💡 **Analyse technique :** Pour le projet **{ST_TITRE_OFFICIEL}**, un débit de {debit_aspiration} m³/h "
+            f"permet un temps de séjour de {temps_sejour:.2f}s, garantissant une réduction de {efficacite_actuelle:.1f}% des oxydes d'azote.")
 # =================================================================
 # 4. PAGE 2 : PROTOTYPE & DATASHEET
 # =================================================================
@@ -291,4 +294,5 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
+
 
