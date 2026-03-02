@@ -180,7 +180,7 @@ if page == "📊 Monitoring Temps Réel":
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("🌀 Ozone (O3)", f"{o3_ppm_in:.2f} ppm", delta="Oxydant")
     c2.metric("✨ Hydroxyle (·OH)", f"{oh_ppm_in:.2f} ppm", delta="Radicalaire")
-    c3.metric("⚠️ NOx Utile (Net)", f"{nox_utile:.1f} ppm", delta=f"Brut: {st.session_state.nox_reelle}")
+    c3.metric("⚠️ NOx sortie incinérateur", f"{nox_utile:.1f} ppm", delta=f"Brut: {st.session_state.nox_reelle}")
     c4.metric("🎯 Efficacité Déduite", f"{efficacite_calculée:.1f} %")
 
     st.divider()
@@ -271,3 +271,4 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du process DASRI-EPH.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
+
