@@ -145,7 +145,7 @@ if page == "📊 Monitoring Temps Réel":
             debit_aspiration = 5.0
             nb_gen = 1
 
-    # --- MOTEUR DE DÉDUCTION CHIMIQUE ---
+   # --- MOTEUR DE DÉDUCTION CHIMIQUE ---
     temp_actuelle = st.session_state.temp_reelle
     hum_actuelle = st.session_state.hum_reelle
     
@@ -156,7 +156,7 @@ if page == "📊 Monitoring Temps Réel":
     oh_ppm_in = (nb_gen * 45 * (1 - f_H) * f_T) / debit_aspiration if debit_aspiration > 0 else 0
 
     # Application de la Tare (Calibrage) sur le NOx entrant
-    nox_utile = max(0.1, st.session_state.nox_reelle - st.session_state.nox_offset)
+    nox_utile = max(0.0, st.session_state.nox_reelle - st.session_state.nox_offset)
 
     tau = 6.0 / debit_aspiration if debit_aspiration > 0 else 0 
     k_react = 0.12 
@@ -164,8 +164,15 @@ if page == "📊 Monitoring Temps Réel":
     potentiel_oxydant = (oh_ppm_in + o3_ppm_in * 0.4) 
     consommation = potentiel_oxydant * tau * k_react
     
-    nox_sortant = max(nox_utile * 0.05, nox_utile - consommation)
-    efficacite_calculée = (1 - (nox_sortant / nox_utile)) * 100 if nox_utile > 0.1 else 0
+    # --- LOGIQUE D'EFFICACITÉ AVEC SEUIL ---
+    if nox_utile > 0.5:
+        nox_sortant = max(nox_utile * 0.05, nox_utile - consommation)
+        efficacite_calculée = (1 - (nox_sortant / nox_utile)) * 100
+        txt_efficacite = f"{efficacite_calculée:.1f} %"
+    else:
+        nox_sortant = 0.0
+        efficacite_calculée = 0.0
+        txt_efficacite = "0.0% (Repos)"
 
     # --- AFFICHAGE MÉTRIQUES ---
     st.subheader(f"Statut : {'🔴 MESURE RÉELLE' if mode_experimental else '🔵 SIMULATION'}")
@@ -180,8 +187,12 @@ if page == "📊 Monitoring Temps Réel":
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("🌀 Ozone (O3)", f"{o3_ppm_in:.2f} ppm", delta="Oxydant")
     c2.metric("✨ Hydroxyle (·OH)", f"{oh_ppm_in:.2f} ppm", delta="Radicalaire")
+    
+    # Affichage du NOx avec le delta du brut pour voir l'effet du Tare
     c3.metric("⚠️ NOx sortie incinérateur", f"{nox_utile:.1f} ppm", delta=f"Brut: {st.session_state.nox_reelle}")
-    c4.metric("🎯 Efficacité Déduite", f"{efficacite_calculée:.1f} %")
+    
+    # Affichage de l'efficacité avec le texte dynamique (Repos ou Valeur)
+    c4.metric("🎯 Efficacité Déduite", txt_efficacite)
 
     st.divider()
     
@@ -271,4 +282,5 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du process DASRI-EPH.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
+
 
