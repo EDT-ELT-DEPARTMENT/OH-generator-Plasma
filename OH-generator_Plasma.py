@@ -23,6 +23,10 @@ st.set_page_config(
 # Rafraîchissement automatique toutes les 2 secondes
 st_autorefresh(interval=2000, key="datarefresh")
 
+# Initialisation persistante du décalage (Offset) pour le calibrage "Zéro"
+if 'nox_offset' not in st.session_state:
+    st.session_state.nox_offset = 0.0
+
 # Navigation par menu latéral
 st.sidebar.title("📂 Menu Principal")
 page = st.sidebar.radio("Navigation :", ["📊 Monitoring Temps Réel", "🔬 Prototype & Datasheet"])
@@ -118,42 +122,50 @@ if page == "📊 Monitoring Temps Réel":
                 except Exception as e:
                     st.error(f"❌ Erreur : {e}")
             
+            # --- SECTION CALIBRAGE ---
+            st.subheader("⚖️ Calibrage du Capteur")
+            if st.button("Calibrer le Zéro (Tare)"):
+                st.session_state.nox_offset = st.session_state.nox_reelle
+                st.success(f"Zéro fixé à {st.session_state.nox_offset} ppm")
+            
+            if st.button("Réinitialiser Calibrage"):
+                st.session_state.nox_offset = 0.0
+                st.info("Calibrage réinitialisé")
+
+            st.divider()
             nb_gen = st.slider("Générateurs Actifs", 0, 3, 1)
             debit_aspiration = st.slider("Débit Aspirateur (m³/h)", 1.0, 15.0, 6.0)
         else:
             st.header("💻 Mode Simulation")
             st.session_state.temp_reelle = st.slider("Température T (°C)", 15.0, 80.0, 25.0)
             st.session_state.hum_reelle = st.slider("Humidité Relative H (%)", 5.0, 95.0, 50.0)
-            st.session_state.nox_reelle = st.slider("Nox Entrant Mesuré (ppm)", 0.0, 500.0, 150.0)
+            st.session_state.nox_reelle = st.slider("Nox Brut (ppm)", 0.0, 500.0, 150.0)
             st.session_state.co_reelle = 15.0
             st.session_state.h2_reelle = 8.0
             debit_aspiration = 5.0
             nb_gen = 1
 
-    # --- MOTEUR DE CALCULS & DÉDUCTION CHIMIQUE ---
+    # --- MOTEUR DE DÉDUCTION CHIMIQUE ---
     temp_actuelle = st.session_state.temp_reelle
     hum_actuelle = st.session_state.hum_reelle
     
-    # Facteurs correctifs Humidité et Température
     f_H = np.exp(-0.025 * (hum_actuelle - 10)) if hum_actuelle > 10 else 1.0
     f_T = np.exp(-0.030 * (temp_actuelle - 25)) if temp_actuelle > 25 else 1.0
     
-    # Production théorique des oxydants entrant dans la chambre
     o3_ppm_in = (nb_gen * 120 * f_H * f_T) / debit_aspiration if debit_aspiration > 0 else 0
     oh_ppm_in = (nb_gen * 45 * (1 - f_H) * f_T) / debit_aspiration if debit_aspiration > 0 else 0
 
-    # Logique de neutralisation basée sur le temps de séjour
-    # t_sejour est inversement proportionnel au débit
+    # Application de la Tare (Calibrage) sur le NOx entrant
+    nox_utile = max(0.1, st.session_state.nox_reelle - st.session_state.nox_offset)
+
     tau = 6.0 / debit_aspiration if debit_aspiration > 0 else 0 
-    k_react = 0.12 # Constante de réactivité chimique O3/OH + NOx
+    k_react = 0.12 
     
-    nox_entrant = st.session_state.nox_reelle
-    # On déduit le NOx sortant par la consommation des radicaux et de l'ozone
     potentiel_oxydant = (oh_ppm_in + o3_ppm_in * 0.4) 
     consommation = potentiel_oxydant * tau * k_react
     
-    nox_sortant = max(nox_entrant * 0.05, nox_entrant - consommation) # 5% minimum résiduel
-    efficacite_calculée = (1 - (nox_sortant / nox_entrant)) * 100 if nox_entrant > 0 else 0
+    nox_sortant = max(nox_utile * 0.05, nox_utile - consommation)
+    efficacite_calculée = (1 - (nox_sortant / nox_utile)) * 100 if nox_utile > 0.1 else 0
 
     # --- AFFICHAGE MÉTRIQUES ---
     st.subheader(f"Statut : {'🔴 MESURE RÉELLE' if mode_experimental else '🔵 SIMULATION'}")
@@ -168,7 +180,7 @@ if page == "📊 Monitoring Temps Réel":
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("🌀 Ozone (O3)", f"{o3_ppm_in:.2f} ppm", delta="Oxydant")
     c2.metric("✨ Hydroxyle (·OH)", f"{oh_ppm_in:.2f} ppm", delta="Radicalaire")
-    c3.metric("⚠️ NOx Entrant (Brut)", f"{nox_entrant:.1f} ppm")
+    c3.metric("⚠️ NOx Utile (Net)", f"{nox_utile:.1f} ppm", delta=f"Brut: {st.session_state.nox_reelle}")
     c4.metric("🎯 Efficacité Déduite", f"{efficacite_calculée:.1f} %")
 
     st.divider()
@@ -178,14 +190,13 @@ if page == "📊 Monitoring Temps Réel":
     y_vals_oh = [(nb_gen * 45 * (1 - f_H) * f_T) / q for q in q_range]
     y_vals_o3 = [(nb_gen * 120 * f_H * f_T) / q for q in q_range]
     
-    # Simulation de la courbe NOx Sortant en fonction du débit Q
     y_vals_nox_out = []
     for q in q_range:
         t_q = 6.0 / q
         oh_q = (nb_gen * 45 * (1 - f_H) * f_T) / q
         o3_q = (nb_gen * 120 * f_H * f_T) / q
         cons_q = (oh_q + o3_q * 0.4) * t_q * k_react
-        y_vals_nox_out.append(max(nox_entrant * 0.05, nox_entrant - cons_q))
+        y_vals_nox_out.append(max(nox_utile * 0.05, nox_utile - cons_q))
 
     fig_q = go.Figure()
     fig_q.add_trace(go.Scatter(x=q_range, y=y_vals_oh, name="Potentiel ·OH", line=dict(color='orange', width=2)))
@@ -195,7 +206,7 @@ if page == "📊 Monitoring Temps Réel":
     fig_q.update_layout(
         template="plotly_dark", 
         title="Cinétique de Réaction : Déduction du NOx de sortie selon le débit", 
-        xaxis_title="Débit Q (m³/h) [Augmentation du flux ->]", 
+        xaxis_title="Débit Q (m³/h)", 
         yaxis_title="Concentration (ppm)",
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
     )
@@ -206,7 +217,7 @@ if page == "📊 Monitoring Temps Réel":
     col_rep1, col_rep2, col_rep3 = st.columns(3)
     
     with col_rep1:
-        st.metric("📉 NOx Neutralisés", f"{(nox_entrant - nox_sortant):.1f} ppm")
+        st.metric("📉 NOx Neutralisés", f"{(nox_utile - nox_sortant):.1f} ppm")
     
     with col_rep2:
         temps_s = 3.6 / debit_aspiration if debit_aspiration > 0 else 0
@@ -215,7 +226,7 @@ if page == "📊 Monitoring Temps Réel":
     with col_rep3:
         st.metric("📤 Rejet Final (Sortie)", f"{nox_sortant:.1f} ppm")
 
-    st.info(f"💡 **Analyse DASRI :** Pour l'EPH de Sidi Bel Abbès, le traitement actuel réduit la charge de NOx de {efficacite_calculée:.1f}%.")
+    st.info(f"💡 **Analyse DASRI :** Offset de calibrage actuel : {st.session_state.nox_offset} ppm. Le traitement réduit la charge utile de {efficacite_calculée:.1f}%.")
 
 # =================================================================
 # 4. PAGE 2 : PROTOTYPE & DATASHEET
@@ -260,4 +271,3 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du process DASRI-EPH.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
-
