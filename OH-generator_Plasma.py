@@ -11,7 +11,6 @@ from fpdf import FPDF
 # =================================================================
 # 1. CONFIGURATION DE LA PAGE & TITRES OFFICIELS
 # =================================================================
-# Titre mémorisé selon vos instructions
 ST_TITRE_OFFICIEL = "Station de supervision et commande d'une unité hybride de traitement de déchets hospitaliers par hydroxyle"
 ADMIN_REF = "Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA"
 
@@ -21,7 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Rafraîchissement automatique toutes les 2 secondes pour le temps réel
+# Rafraîchissement automatique toutes les 2 secondes
 st_autorefresh(interval=2000, key="datarefresh")
 
 # Navigation par menu latéral
@@ -42,7 +41,6 @@ def initialiser_firebase():
                     fb_secrets["private_key"] = fb_secrets["private_key"].replace("\\n", "\n")
                 cred = credentials.Certificate(fb_secrets)
             else:
-                # Fallback local pour développement (votre-cle.json)
                 cred = credentials.Certificate("votre-cle.json")
                 
             firebase_admin.initialize_app(cred, {
@@ -73,82 +71,53 @@ def generer_pdf_datasheet():
     pdf.multi_cell(190, 8, txt="Ce prototype utilise des générateurs d'ozone et un réacteur DBD "
                                "pour la production de radicaux hydroxyles destinés à la "
                                "neutralisation des agents pathogènes hospitaliers.")
-    return pdf.output()
+    return pdf.output(dest='S').encode('latin-1')
 
 # =================================================================
-# 3. PAGE 1 : MONITORING TEMPS RÉEL (FLUX RÉEL FORCÉ)
+# 3. PAGE 1 : MONITORING TEMPS RÉEL
 # =================================================================
 if page == "📊 Monitoring Temps Réel":
     st.title("⚡ Monitoring des Oxydants Hybrides")
     st.markdown(f"### {ST_TITRE_OFFICIEL}")
     st.info(f"📅 État du système au : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
 
-    # Initialisation des variables d'état pour le stockage des mesures réelles
+    # Initialisation des états
     if 'temp_reelle' not in st.session_state: st.session_state.temp_reelle = 25.0
     if 'hum_reelle' not in st.session_state: st.session_state.hum_reelle = 50.0
+    if 'co_reelle' not in st.session_state: st.session_state.co_reelle = 0.0
+    if 'h2_reelle' not in st.session_state: st.session_state.h2_reelle = 0.0
+    if 'nox_reelle' not in st.session_state: st.session_state.nox_reelle = 0.0
 
     with st.sidebar:
         st.header("🎮 Contrôle & Réception")
-        # Par défaut mis sur True pour forcer l'affichage réel au démarrage
         mode_experimental = st.toggle("🚀 Activer Flux Réel (Wemos/TTGO)", value=True)
         st.divider()
         
         if mode_experimental:
-            carte_active = st.selectbox(
-                "📡 Source de données :",
-                ["Wemos D1 Mini", "TTGO ESP32"]
-            )
-            
-            # On pointe sur /EDT_SBA
-            if "Wemos" in carte_active:
-                fb_path = "/EDT_SBA"
-            else:
-                fb_path = "/EDT_SBA/TTGOESP32"
+            carte_active = st.selectbox("📡 Source de données :", ["Wemos D1 Mini", "TTGO ESP32"])
+            fb_path = "/EDT_SBA" if "Wemos" in carte_active else "/EDT_SBA/TTGOESP32"
             
             if initialiser_firebase():
                 try:
                     ref = db.reference(fb_path)
                     data_cloud = ref.get()
-                    
                     if data_cloud:
-                        # 1. Récupération T et H
                         st.session_state.temp_reelle = float(data_cloud.get('temperature', 25.0))
                         st.session_state.hum_reelle = float(data_cloud.get('humidite', 50.0))
                         
-                        # 2. Récupération et conversion du NOx en PPM
-                        val_brute = int(data_cloud.get('nox', 0))
+                        # Récupération NOx (MQ-135)
+                        val_nox = int(data_cloud.get('nox', 0))
+                        if val_nox > 0:
+                            ratio = (1023.0 / val_nox) - 1.0
+                            st.session_state.nox_reelle = round(116.6 * pow(ratio, -2.76), 2)
                         
-                        # --- FORMULE DE CONVERSION (DÉPARTEMENT ÉLECTROTECHNIQUE) ---
-                        # On transforme le signal 0-1023 en PPM (estimation NOx)
-                        if val_brute > 0:
-                            # Calcul basé sur la résistance relative du capteur
-                            # Plus val_brute est haut, plus le PPM est élevé
-                            ratio = (1023.0 / val_brute) - 1.0
-                            # Formule simplifiée pour le MQ-135 (NOx) :
-                            ppm_calc = 116.6 * pow(ratio, -2.76) 
-                            st.session_state.nox_reelle = round(ppm_calc, 2)
-                        else:
-                            st.session_state.nox_reelle = 0.0
+                        # Récupération CO (MQ-9) et H2
+                        st.session_state.co_reelle = float(data_cloud.get('co', 0.0))
+                        st.session_state.h2_reelle = float(data_cloud.get('h2', 0.0))
                         
-                        st.success(f"✅ Flux Multi-Capteurs Actif : {carte_active}")
-                    else:
-                        st.warning(f"⏳ Données absentes sur : {fb_path}")
+                        st.success(f"✅ Flux Multi-Capteurs Actif")
                 except Exception as e:
-                    st.error(f"❌ Erreur de réception : {e}")
-            
-            if initialiser_firebase():
-                try:
-                    ref = db.reference(fb_path)
-                    data_cloud = ref.get()
-                    if data_cloud:
-                        # Recherche flexible des clés (temp ou temperature / hum ou humidite)
-                        st.session_state.temp_reelle = float(data_cloud.get('temperature', data_cloud.get('temp', 25.0)))
-                        st.session_state.hum_reelle = float(data_cloud.get('humidite', data_cloud.get('hum', 50.0)))
-                        st.success(f"✅ Données en direct de : {carte_active}")
-                    else:
-                        st.warning(f"⏳ En attente sur : {fb_path}")
-                except Exception as e:
-                    st.error(f"❌ Erreur de réception : {e}")
+                    st.error(f"❌ Erreur : {e}")
             
             nb_gen = st.slider("Générateurs Actifs", 0, 3, 1)
             debit_aspiration = st.slider("Débit Aspirateur (m³/h)", 1.0, 15.0, 6.0)
@@ -156,99 +125,45 @@ if page == "📊 Monitoring Temps Réel":
             st.header("💻 Mode Simulation")
             st.session_state.temp_reelle = st.slider("Température T (°C)", 15.0, 80.0, 25.0)
             st.session_state.hum_reelle = st.slider("Humidité Relative H (%)", 5.0, 95.0, 50.0)
-            debit_aspiration = st.slider("Débit d'aspiration (m³/h)", 1.0, 20.0, 5.0)
+            st.session_state.co_reelle = st.slider("Niveau CO (ppm)", 0.0, 500.0, 15.0)
+            st.session_state.h2_reelle = st.slider("Niveau H2 (ppm)", 0.0, 500.0, 8.0)
+            debit_aspiration = 5.0
             nb_gen = 1
 
-    # --- RÉCUPÉRATION DES VALEURS POUR LE CALCUL ---
+    # Moteur de calculs
     temp_actuelle = st.session_state.temp_reelle
     hum_actuelle = st.session_state.hum_reelle
-
-    # --- MOTEUR DE CALCULS PHYSIQUES ---
-    # Facteurs de correction environnementaux
     f_H = np.exp(-0.025 * (hum_actuelle - 10)) if hum_actuelle > 10 else 1.0
     f_T = np.exp(-0.030 * (temp_actuelle - 25)) if temp_actuelle > 25 else 1.0
-    
-    # Calcul des concentrations (PPM)
-    o3_ppm = (nb_gen * 120 * f_H * f_T) / debit_aspiration if debit_aspiration > 0 else 0
     oh_ppm = (nb_gen * 45 * (1 - f_H) * f_T) / debit_aspiration if debit_aspiration > 0 else 0
-    t_residence = (0.002 / (debit_aspiration / 3600)) if debit_aspiration > 0 else 0
 
-    # --- AFFICHAGE MÉTRIQUES PRINCIPALES (SANS CONDENSATION) ---
+    # Affichage Métriques
     st.subheader(f"Statut : {'🔴 MESURE RÉELLE' if mode_experimental else '🔵 SIMULATION'}")
     
     m1, m2, m3, m4 = st.columns(4)
-    
-    # 1. Température Réelle ou Simulée
-    m1.metric("🌡️ Température", f"{temp_actuelle:.1f} °C", delta="Live" if mode_experimental else None)
-    
-    # 2. Humidité Réelle ou Simulée
-    m2.metric("💧 Humidité", f"{hum_actuelle:.1f} %", delta="Live" if mode_experimental else None)
-    
-    # 3. NOx Réel (PPM) ou Débit (Alternance automatique)
-    if mode_experimental:
-        # On récupère la valeur convertie en PPM (depuis le bloc précédent)
-        val_nox_ppm = st.session_state.get('nox_reelle', 0.0)
-        
-        # --- LOGIQUE D'ALERTE SELON LES NORMES ---
-        if val_nox_ppm > 100:
-            alerte_label = "🚨 DANGER"
-            couleur_sens = "inverse"  # Rouge (car inverse de 'normal')
-        elif val_nox_ppm > 50:
-            alerte_label = "⚠️ ALERTE"
-            couleur_sens = "off"      # Gris/Orange
-        else:
-            alerte_label = "✅ NORMAL"
-            couleur_sens = "normal"   # Vert
-            
-        m3.metric(
-            label="🧪 Concentration NOx", 
-            value=f"{val_nox_ppm} ppm", 
-            delta=alerte_label, 
-            delta_color=couleur_sens
-        )
-    else:
-        # En mode simulation, on garde l'affichage du débit d'aspiration
-        m3.metric("🌀 Débit d'Air", f"{debit_aspiration:.1f} m³/h")
-    
-    # 4. Temps de Résidence
-    m4.metric("⏱️ T. Résidence", f"{t_residence:.3f} s")
+    m1.metric("🌡️ Température", f"{temp_actuelle:.1f} °C")
+    m2.metric("💧 Humidité", f"{hum_actuelle:.1f} %")
+    m3.metric("🧪 Monoxyde CO", f"{st.session_state.co_reelle:.1f} ppm")
+    m4.metric("🔋 Hydrogène H2", f"{st.session_state.h2_reelle:.1f} ppm")
 
-    # --- ANALYSE CHIMIQUE ---
     st.markdown("#### 🧪 Analyse Chimique des Radicaux")
     c1, c2, c3, c4 = st.columns(4)
-    
-    # Note : Les calculs de concentration utilisent maintenant vos vraies valeurs T et H !
-    c1.metric("Concentration O3", f"{o3_ppm:.2f} ppm")
-    c2.metric("Concentration ·OH", f"{oh_ppm:.2f} ppm", delta="Hydroxyle")
-    c3.metric("Production O3", f"{(o3_ppm * debit_aspiration * 2.14):.0f} mg/h")
-    c4.metric("Puissance active", f"{nb_gen * 85} W")
+    c1.metric("Concentration ·OH", f"{oh_ppm:.2f} ppm", delta="Hydroxyle")
+    c2.metric("Débit d'Air", f"{debit_aspiration:.1f} m³/h")
+    c3.metric("Puissance active", f"{nb_gen * 85} W")
+    c4.metric("Niveau NOx", f"{st.session_state.nox_reelle} ppm")
 
     st.divider()
     
-    # --- GRAPHIQUE INTERACTIF ---
+    # Graphique interactif
     q_range = np.linspace(1, 20, 100)
-    fig_q = go.Figure()
-    
-    # Courbe théorique basée sur les conditions réelles captées par la Wemos
     y_vals = [(nb_gen * 45 * (1 - f_H) * f_T) / q for q in q_range]
-    
-    fig_q.add_trace(go.Scatter(
-        x=q_range, 
-        y=y_vals, 
-        name="·OH (ppm) Calculé", 
-        line=dict(color='orange', width=3)
-    ))
-    
-    fig_q.update_layout(
-        template="plotly_dark", 
-        title=f"Cinétique de l'hydroxyle (Basée sur T:{temp_actuelle}°C et H:{hum_actuelle}%)", 
-        xaxis_title="Q (m³/h)", 
-        yaxis_title="Radicaux (ppm)"
-    )
+    fig_q = go.Figure(go.Scatter(x=q_range, y=y_vals, name="·OH (ppm)", line=dict(color='orange', width=3)))
+    fig_q.update_layout(template="plotly_dark", title="Cinétique de l'hydroxyle", xaxis_title="Q (m³/h)", yaxis_title="Radicaux (ppm)")
     st.plotly_chart(fig_q, use_container_width=True)
 
 # =================================================================
-# 4. PAGE 2 : PROTOTYPE & DATASHEET (TABLEAU TECHNIQUE COMPLET)
+# 4. PAGE 2 : PROTOTYPE & DATASHEET (VERSION INTEGRALE DEMANDÉE)
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Architecture & Spécifications")
@@ -274,7 +189,6 @@ elif page == "🔬 Prototype & Datasheet":
     st.divider()
     st.subheader("📐 Architecture & Nomenclature des Composants")
 
-    # Votre tableau exact corrigé et complet (selon votre disposition)
     data_tab = {
         "Bloc/Fonction": [
             "Filtration Électrostatique", 
@@ -328,11 +242,8 @@ elif page == "🔬 Prototype & Datasheet":
     st.table(pd.DataFrame(data_tab))
 
 # =================================================================
-# 5. PIED DE PAGE (RAPPEL DES RÉFÉRENCES)
+# 5. PIED DE PAGE
 # =================================================================
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
-
-
-
