@@ -158,11 +158,52 @@ if page == "📊 Monitoring Temps Réel":
 
     st.divider()
     
-    # Graphique interactif
+    # =================================================================
+    # MISE À JOUR DU GRAPHIQUE INTERACTIF (·OH, O3, NOx)
+    # =================================================================
     q_range = np.linspace(1, 20, 100)
+    
+    # Calcul des courbes en fonction du débit Q
     y_vals_oh = [(nb_gen * 45 * (1 - f_H) * f_T) / q for q in q_range]
-    fig_q = go.Figure(go.Scatter(x=q_range, y=y_vals_oh, name="·OH (ppm)", line=dict(color='orange', width=3)))
-    fig_q.update_layout(template="plotly_dark", title="Cinétique de l'hydroxyle", xaxis_title="Q (m³/h)", yaxis_title="Radicaux (ppm)")
+    y_vals_o3 = [(nb_gen * 120 * f_H * f_T) / q for q in q_range]
+    
+    # Pour le NOx, on affiche une tendance basée sur la mesure réelle actuelle
+    # ajustée par le débit (dilution)
+    nox_base = st.session_state.nox_reelle if st.session_state.nox_reelle > 0 else 50.0
+    y_vals_nox = [(nox_base * 6.0) / q for q in q_range] # 6.0 est le débit de référence
+
+    # Création de la figure Plotly
+    fig_q = go.Figure()
+
+    # Ajout de la courbe Hydroxyle
+    fig_q.add_trace(go.Scatter(
+        x=q_range, y=y_vals_oh, 
+        name="·OH (Radicaux)", 
+        line=dict(color='orange', width=3)
+    ))
+
+    # Ajout de la courbe Ozone
+    fig_q.add_trace(go.Scatter(
+        x=q_range, y=y_vals_o3, 
+        name="O3 (Ozone)", 
+        line=dict(color='cyan', width=2, dash='dash')
+    ))
+
+    # Ajout de la courbe NOx
+    fig_q.add_trace(go.Scatter(
+        x=q_range, y=y_vals_nox, 
+        name="NOx (Rejets)", 
+        line=dict(color='red', width=2, dash='dot')
+    ))
+
+    fig_q.update_layout(
+        template="plotly_dark", 
+        title="Cinétique comparée : ·OH vs O3 vs NOx", 
+        xaxis_title="Débit d'air Q (m³/h)", 
+        yaxis_title="Concentration (ppm)",
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+    )
+
     st.plotly_chart(fig_q, use_container_width=True)
 
 # =================================================================
@@ -250,3 +291,4 @@ elif page == "🔬 Prototype & Datasheet":
 st.warning("⚠️ Sécurité : Risque de Haute Tension (35kV). Surveillance active du Département d'Électrotechnique.")
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown(f"<center><b>{ST_TITRE_OFFICIEL}</b><br><small>{ADMIN_REF}</small></center>", unsafe_allow_html=True)
+
